@@ -37,5 +37,8 @@ if __name__ == '__main__':
     elif mode == '--eval-client' or mode == '-ec':
         from handyrl.evaluation import eval_client_main as main
         main(args, sys.argv[2:])
+    elif mode == '--test':
+        from handyrl.envs.ci_geister import test_cigeister
+        test_cigeister()
     else:
         print('Not found mode %s.' % mode)

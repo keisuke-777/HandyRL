@@ -1,9 +1,10 @@
 
 env_args:
-    env: 'TicTacToe'
+    # env: 'TicTacToe'
     #env: 'Geister'
     #env: 'HungryGeese'
     #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
+    env: 'CIGeister'
 
 train_args:
     turn_based_training: True
@@ -14,19 +15,19 @@ train_args:
     entropy_regularization: 1.0e-1
     entropy_regularization_decay: 0.1
     update_episodes: 200
-    batch_size: 128
+    batch_size: 256
     minimum_episodes: 400
     maximum_episodes: 100000
     epochs: -1
     num_batchers: 2
     eval_rate: 0.1
     worker:
-        num_parallel: 6
+        num_parallel: 6 # プロセス数
     lambda: 0.7
-    policy_target: 'TD' # 'UPGO' 'VTRACE' 'TD' 'MC'
-    value_target: 'TD' # 'VTRACE' 'TD' 'MC'
+    policy_target: 'UPGO' # 'UPGO' 'VTRACE' 'TD' 'MC'
+    value_target: 'VTRACE' # 'VTRACE' 'TD' 'MC'
     seed: 0
-    restart_epoch: 0
+    restart_epoch: 0 # 途中から学習を再開する場合に指定する(0だと最初から開始)
 
 
 worker_args:
