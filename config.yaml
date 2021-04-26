@@ -22,12 +22,12 @@ train_args:
     num_batchers: 2
     eval_rate: 0.1
     worker:
-        num_parallel: 6 # プロセス数
+        num_parallel: 6 # Number of processes
     lambda: 0.7
     policy_target: 'UPGO' # 'UPGO' 'VTRACE' 'TD' 'MC'
     value_target: 'VTRACE' # 'VTRACE' 'TD' 'MC'
     seed: 0
-    restart_epoch: 0 # 途中から学習を再開する場合に指定する(0だと最初から開始)
+    restart_epoch: 0 # Specify when restarting learning from the middle (0 means start from the beginning)
 
 
 worker_args:
