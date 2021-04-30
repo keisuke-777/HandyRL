@@ -70,7 +70,7 @@ def convert_state_to_obs(state):
     scalar = np.zeros(18, dtype=np.float32)
 
     # ！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
-    # 先手かどうかの部分どうすれば良いのかわからんので後程修正(先手か後手かでミスると見たことない盤面が出ちゃう？？)
+    # 先手かどうかの部分どうすれば良いのかわからんので後程修正(先手か後手かでミスると見たことない盤面が出ちゃうかも？？)
     scalar[0] = state.depth % 2  # 先手かどうか
     scalar[1] = 1
 
@@ -84,19 +84,86 @@ def convert_state_to_obs(state):
     return obs
 
 
-# handyRLのガイスターをgame.pyのガイスターに変換
-def convert_handyGeister_to_myGeister():
-    pass
+# gameのactions→handyRLのactions
+def convert_gameAction_to_handyAction(game_actions):
+    handy_actions = []
+    for game_act in game_actions:
+        pos = game_act // 4
+        direction = game_act % 4
+
+        # 座標を時計回りに90度回転させる作業
+        row = pos // 6
+        line = pos % 6
+        handy_pos = 5 - row + line * 6
+
+        # 方向に関しては互換性がないので場当たり的にやるしかない
+        # game→handyの方向変換(回転を考慮)
+        handy_dir = 100
+        if direction == 0:
+            handy_dir = 1
+        elif direction == 1:
+            handy_dir = 0
+        elif direction == 2:
+            handy_dir = 2
+        elif direction == 3:
+            handy_dir = 3
+        else:
+            print("エラー：convert_gameAction_to_handyAction")
+
+        # 行動番号をhandyRLの形に計算しなおす
+        handy_act = handy_pos + 36 * handy_dir
+        handy_actions.append(handy_act)
+    return handy_actions
 
 
 # handyRLのaction→gameのaction
-def convert_handyAction_to_gameAction():
+def convert_handyAction_to_gameAction(handy_action):
+    pos = handy_action % 36
+    direction = handy_action // 36
+
+    # 座標を反時計回りに90度回転させる作業
+    row = pos // 6
+    line = pos % 6
+    game_pos = (5 - line) * 6 + row
+
+    # 方向を変換
+    game_dir = 100
+    if direction == 0:
+        game_dir = 1
+    elif direction == 1:
+        game_dir = 0
+    elif direction == 2:
+        game_dir = 2
+    elif direction == 3:
+        game_dir = 3
+    else:
+        print("エラー：convert_handyAction_to_gameAction")
+
+    game_action = game_pos * 4 + game_dir
+    return game_action
+
+
+# modelを持っているagentと自作のobsからaction(game.pyに適応)とpolicyのセットを抽出
+def obs_to_policy_to_use_game(agent, obs, state):
+    # 方策を取得
+    outputs = agent.plan(obs)
+
+    game_actions = state.legal_actions()
+    handy_actions = convert_gameAction_to_handyAction(game_actions)
+
+    p = outputs["policy"]
+    ap_list = sorted(
+        # 行動番号をgameで使用しているものに直しつつ、必要なポリシーを抽出
+        [(convert_handyAction_to_gameAction(a), p[a]) for a in handy_actions],
+        key=lambda x: -x[1],
+    )
+
+    return ap_list
+
+
+# handyRLのガイスターをgame.pyのガイスターに変換
+def convert_handyGeister_to_myGeister():
     pass
-
-
-# 配列obsから方策を取得
-def predict_using_obs(obs, agent):
-    return agent.plan(obs)
 
 
 # モデルファイルからモデルを入手
@@ -107,8 +174,8 @@ def get_model(env, model_path):
     return ModelWrapper(model)
 
 
-def make_agent(env):
-    model_path = "models/latest.pth"
+def make_agent(env, path):
+    model_path = path
     agent = Agent(get_model(env, model_path))
     return agent
 
@@ -141,6 +208,38 @@ def test_predict():
     # print(len(policy))
 
 
+# 最も利得の高い行動を選択
+# "models/10000.pth"
+def HandyAction(path):
+    env = Environment()
+    env.reset()
+    agent = make_agent(env, path)
+
+    def HandyAction(state):
+        obs = convert_state_to_obs(state)
+        ap_list = obs_to_policy_to_use_game(agent, obs, state)
+        return ap_list[0][0]
+
+    return HandyAction
+
+
+# def EvalHandyRL(number_of_matches, path):
+#     env = Environment()
+#     env.reset()
+#     agent = make_agent(env, path)
+#     for _ in range(number_of_matches):
+#         # 状態の生成
+#         state = State()
+#         while True:
+#             # ゲーム終了
+#             if state.is_done():
+#                 break
+#             if state.depth % 2 == 0:
+#                 obs = convert_state_to_obs(state)
+#             else:
+#                 pass
+
+
 if __name__ == "__main__":
     os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -152,13 +251,15 @@ if __name__ == "__main__":
 
     # from game import State
 
-    state = State()
-    # print(state.pieces)
-    # print(state.enemy_pieces)
+    path = "models/10000.pth"
+    EvalHandyRL(100, path)
+
+    policies = obs_to_policy_to_use_game(agent, obs, state)
+    # print(policies)
 
     # convert_state_to_obs(state)
 
-    test_predict()
+    # test_predict()
     # test_cigeister()
 
     # 方策を持ってくる
