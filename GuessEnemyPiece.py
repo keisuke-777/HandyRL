@@ -10,11 +10,12 @@ import itertools
 import time
 from game import State
 from pv_mcts import predict
-from dual_network import DN_INPUT_SHAPE
+
 from pathlib import Path
 from tensorflow.keras.models import load_model
 
 gamma = 0.9
+DN_INPUT_SHAPE = (6, 6, 4)
 
 # おそらく不完全情報ガイスター(のstateのみ？)を定義してそれを更新して管理した方がよさげ
 # 不完全情報ガイスターの盤面情報及びそれらの推測値
@@ -460,9 +461,12 @@ def my_ii_predict(model, ii_state):
                 enemy_red_set,
             )
 
+            print(ii_pieces_array)
+
             x = np.array(ii_pieces_array)
             x = x.reshape(c, a, b).transpose(1, 2, 0).reshape(1, a, b, c)
             y = model.predict(x, batch_size=1)  # 推論
+
             policies = y[0][0][legal_actions]  # 合法手のみの方策の取得
             policies /= sum(policies) if sum(policies) else 1  # 合計1の確率分布に変換
 
@@ -501,6 +505,8 @@ def enemy_ii_predict(model, ii_state):
                 num_and_enemy_blue[1],
                 enemy_red_set,
             )
+
+            print(ii_pieces_array)
 
             # 方策の算出
             x = np.array(ii_pieces_array)

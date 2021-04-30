@@ -275,9 +275,9 @@ import numpy as np
 import itertools
 import time
 from pv_mcts import predict, pv_mcts_scores, pv_mcts_action
-from dual_network import DN_INPUT_SHAPE
 from pathlib import Path
 from tensorflow.keras.models import load_model
+
 
 # 価値の高い行動を愚直に選択し続ける
 def predict_action(model, state):

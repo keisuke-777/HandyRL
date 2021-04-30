@@ -4,7 +4,6 @@
 
 # パッケージのインポート
 from game import State
-from dual_network import DN_INPUT_SHAPE
 from math import sqrt
 from tensorflow.keras.models import load_model
 from pathlib import Path
@@ -16,7 +15,7 @@ PV_EVALUATE_COUNT = 50  # 1推論あたりのシミュレーション回数
 # 推論
 def predict(model, state):
     # 推論のための入力データのシェイプの変換
-    a, b, c = DN_INPUT_SHAPE
+    a, b, c = (6, 6, 4)  # DN_INPUT_SHAPE
     x = np.array(state.pieces_array())
     x = x.reshape(c, a, b).transpose(1, 2, 0).reshape(1, a, b, c)
 
