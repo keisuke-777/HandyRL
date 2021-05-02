@@ -259,16 +259,18 @@ class II_State:
 
         # 1つのボードに味方の駒と敵の駒を集める
         board = [0] * 36
-        if self.depth % 2 == 0:
-            my_p = self.pieces.copy()
-            rev_ep = list(reversed(self.enemy_pieces))
-            for i in range(36):
-                board[i] = my_p[i] - rev_ep[i]
-        else:
-            my_p = list(reversed(self.pieces))
-            rev_ep = self.enemy_pieces.copy()
-            for i in range(36):
-                board[i] = rev_ep[i] - my_p[i]
+        # 0~7が敵、8~15が自分
+
+        # 敵の駒
+        for enemy_piece_coo in self.all_piece[0:8]:
+            if enemy_piece_coo < 36 and enemy_piece_coo >= 0:
+                board[enemy_piece_coo] = -1
+
+        # 自分の駒
+        for blue_index in self.real_my_piece_blue_set:
+            board[self.all_piece[blue_index]] = 1
+        for red_index in self.real_my_piece_red_set:
+            board[self.all_piece[red_index]] = 2
 
         board_essence = []
         for i in board:
@@ -277,16 +279,39 @@ class II_State:
             elif i == 2:
                 board_essence.append("自赤")
             elif i == -1:
-                board_essence.append("敵青")
-            elif i == -2:
-                board_essence.append("敵赤")
+                board_essence.append("敵駒")
             else:
                 board_essence.append("　　")
 
-        str = (
+        ii_str = (
             hr + row + hr + row + hr + row + hr + row + hr + row + hr + row + hr
         ).format(*board_essence)
-        return str
+        ii_str += "\n" + str(self.living_piece_color)
+        return ii_str
+
+
+# stateの駒の色に応じたii_stateを作成する(初期のstateのみ使用可能)
+def create_ii_state_from_state(state, enemy_view=False):
+    if enemy_view:
+        # 敵視点でii_stateを作成
+        pieces = state.enemy_pieces
+    else:
+        pieces = state.pieces
+    # 駒のIDと座標が紐づいたリストを手動作成(初期配置では座標番号25~28と31~34に駒が存在)
+    piece_id_list = [0] * 36
+    for i in range(4):
+        piece_id_list[25 + i] = 8 + i
+    for i in range(4):
+        piece_id_list[31 + i] = 12 + i
+
+    blue_piece_set = set({})
+    for index, piece_color in enumerate(pieces):
+        if piece_color == 1:
+            blue_piece_set.add(piece_id_list[index])
+
+    print(blue_piece_set)
+    ii_state = II_State(blue_piece_set)
+    return ii_state
 
 
 ### ガイスターAI大会のプロトコル周り

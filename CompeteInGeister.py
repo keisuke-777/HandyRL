@@ -24,38 +24,37 @@ class State:
 
         # 駒の初期配置
         if pieces == None or enemy_pieces == None:
-            # 青4赤4z
-            # piece_list = [1, 1, 1, 1, 2, 2, 2, 2]
+            piece_list = [1, 1, 1, 1, 2, 2, 2, 2]  # 青4赤4
 
-            # random.shuffle(piece_list)  # 配置をランダムに
-            # self.pieces[25] = piece_list[0]
-            # self.pieces[26] = piece_list[1]
-            # self.pieces[27] = piece_list[2]
-            # self.pieces[28] = piece_list[3]
-            # self.pieces[31] = piece_list[4]
-            # self.pieces[32] = piece_list[5]
-            # self.pieces[33] = piece_list[6]
-            # self.pieces[34] = piece_list[7]
+            random.shuffle(piece_list)  # 配置をランダムに
+            self.pieces[25] = piece_list[0]
+            self.pieces[26] = piece_list[1]
+            self.pieces[27] = piece_list[2]
+            self.pieces[28] = piece_list[3]
+            self.pieces[31] = piece_list[4]
+            self.pieces[32] = piece_list[5]
+            self.pieces[33] = piece_list[6]
+            self.pieces[34] = piece_list[7]
 
-            # random.shuffle(piece_list)  # 配置をランダムに
-            # self.enemy_pieces[25] = piece_list[0]
-            # self.enemy_pieces[26] = piece_list[1]
-            # self.enemy_pieces[27] = piece_list[2]
-            # self.enemy_pieces[28] = piece_list[3]
-            # self.enemy_pieces[31] = piece_list[4]
-            # self.enemy_pieces[32] = piece_list[5]
-            # self.enemy_pieces[33] = piece_list[6]
-            # self.enemy_pieces[34] = piece_list[7]
+            random.shuffle(piece_list)  # 配置をランダムに
+            self.enemy_pieces[25] = piece_list[0]
+            self.enemy_pieces[26] = piece_list[1]
+            self.enemy_pieces[27] = piece_list[2]
+            self.enemy_pieces[28] = piece_list[3]
+            self.enemy_pieces[31] = piece_list[4]
+            self.enemy_pieces[32] = piece_list[5]
+            self.enemy_pieces[33] = piece_list[6]
+            self.enemy_pieces[34] = piece_list[7]
 
             # 実験用(データとりではランダムにする)
-            self.pieces[25] = self.enemy_pieces[25] = 1
-            self.pieces[26] = self.enemy_pieces[26] = 2
-            self.pieces[27] = self.enemy_pieces[27] = 1
-            self.pieces[28] = self.enemy_pieces[28] = 2
-            self.pieces[31] = self.enemy_pieces[31] = 2
-            self.pieces[32] = self.enemy_pieces[32] = 1
-            self.pieces[33] = self.enemy_pieces[33] = 2
-            self.pieces[34] = self.enemy_pieces[34] = 1
+            # self.pieces[25] = self.enemy_pieces[25] = 1
+            # self.pieces[26] = self.enemy_pieces[26] = 2
+            # self.pieces[27] = self.enemy_pieces[27] = 1
+            # self.pieces[28] = self.enemy_pieces[28] = 2
+            # self.pieces[31] = self.enemy_pieces[31] = 2
+            # self.pieces[32] = self.enemy_pieces[32] = 1
+            # self.pieces[33] = self.enemy_pieces[33] = 2
+            # self.pieces[34] = self.enemy_pieces[34] = 1
 
     # 負けかどうか
     def is_lose(self):
@@ -281,7 +280,7 @@ def human_player_action(state):
 
 
 import GuessEnemyPiece
-from GuessEnemyPiece import II_State
+from GuessEnemyPiece import II_State, create_ii_state_from_state
 import numpy as np
 import itertools
 import time
@@ -510,7 +509,8 @@ def evaluate_HandyGeister():
         just_before_action_num = 0
         # 状態の生成
         state = State()
-        ii_state = II_State({8, 10, 13, 15})
+        # ii_state = II_State({8, 10, 13, 15})
+        ii_state = create_ii_state_from_state(state, True)
         model = None
 
         # ゲーム終了までのループ
@@ -565,11 +565,15 @@ def main():
     # 状態の生成
     state = State()
 
+    ii_state = create_ii_state_from_state(state, True)
+    print(state)
+    print(ii_state)
+    # ii_state = GuessEnemyPiece.II_State({8, 9, 10, 11})
+
     # GuessEnemyPieceに必要な処理
     # path = sorted(Path("./model").glob("*.h5"))[-1]
     path = "models/best.h5"
     model = load_model(str(path))
-    ii_state = GuessEnemyPiece.II_State({8, 9, 10, 11})
 
     # 直前の行動を保管
     just_before_action_num = 0
@@ -625,6 +629,6 @@ def main():
 
 # 動作確認
 if __name__ == "__main__":
-    # main()
+    main()
     # evaluate_GeisterLog()
-    evaluate_HandyGeister()
+    # evaluate_HandyGeister()

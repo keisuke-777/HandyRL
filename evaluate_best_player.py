@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 # パラメータの準備
-EP_GAME_COUNT = 100  # 1評価あたりのゲーム数(増やす？)
+EP_GAME_COUNT = 100  # 1評価あたりのゲーム数
 
 # 先手プレイヤーのポイント
 def first_player_point(ended_state):
@@ -59,19 +59,25 @@ def evaluate_algorithm_of(label, next_actions):
 
 # ベストプレイヤーの評価
 def evaluate_best_player():
-    # HandyRL
+    # HandyRLの方策を短絡的に選択するエージェント
     from test import HandyAction
 
-    # HandyRLの方策を短絡的に選択するエージェント
     handy_action = HandyAction("models/10000.pth")
 
-    # VSランダム
-    next_actions = (handy_action, random_action)
-    evaluate_algorithm_of("VS_Random", next_actions)
+    # # VSランダム
+    # next_actions = (handy_action, random_action)
+    # evaluate_algorithm_of("VS_Random", next_actions)
 
-    # VSモンテカルロ木探索
-    next_actions = (handy_action, mcts_action)
-    evaluate_algorithm_of("VS_MCTS", next_actions)
+    # # VSモンテカルロ木探索
+    # next_actions = (handy_action, mcts_action)
+    # evaluate_algorithm_of("VS_MCTS", next_actions)
+
+    # VS不完全情報で行動を選択するHandyRLエージェント
+    from test import IIHandyAction
+
+    ii_handy_action = IIHandyAction("ii_models/10000.pth")
+    next_actions = (handy_action, ii_handy_action)
+    evaluate_algorithm_of("VS_iiHandy", next_actions)
 
     # VS人間
     # next_actions = (handy_action, human_player_action)

@@ -155,12 +155,10 @@ def convert_iip_to_obs(ii_pieces_array):
     return obs
 
 
-# Competeのii_state→handyRLのobs(不完全情報)
-def convert_state_to_obs(ii_state):
+# gameのstate→handyRLのobs(不完全情報)(後でii = True とか初期値作ってconvert_state_to_obsと統合する)
+def convert_state_to_ii_obs(state):
     obs = {"scalar": None, "board": None}
     blue_c_cnt = red_c_cnt = blue_o_cnt = red_o_cnt = 0
-    # boardの作成
-    # BRbrのnp配列をそれぞれ作成して、それらを足し合わせてなんとかする
 
     # 自分の駒
     blue_c = np.zeros((6, 6), dtype=np.float32)
@@ -200,8 +198,9 @@ def convert_state_to_obs(ii_state):
             blue_o + red_o,
             blue_c,
             red_c,
-            blue_o,
-            red_o,
+            # 不完全情報では不明なので0で埋める
+            np.zeros((6, 6), dtype=np.float32),
+            np.zeros((6, 6), dtype=np.float32),
         ]
     ).astype(np.float32)
 
@@ -210,8 +209,6 @@ def convert_state_to_obs(ii_state):
     # scalarの作成
     scalar = np.zeros(18, dtype=np.float32)
 
-    # ！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
-    # 先手かどうかの部分どうすれば良いのかわからんので後程修正(先手か後手かでミスると見たことない盤面が出ちゃうかも？？)
     scalar[0] = state.depth % 2  # 先手かどうか
     scalar[1] = 1
 
@@ -395,6 +392,20 @@ def HandyAction(path):
         return ap_list[0][0]
 
     return HandyAction
+
+
+# 不完全情報で最も利得の高い行動を選択する
+def IIHandyAction(path):
+    env = Environment()
+    env.reset()
+    agent = make_agent(env, path)
+
+    def IIHandyAction(state):
+        obs = convert_state_to_ii_obs(state)
+        ap_list = obs_to_policy_to_use_game(agent, obs, state)
+        return ap_list[0][0]
+
+    return IIHandyAction
 
 
 # def EvalHandyRL(number_of_matches, path):
