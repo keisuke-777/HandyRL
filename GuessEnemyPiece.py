@@ -309,7 +309,6 @@ def create_ii_state_from_state(state, enemy_view=False):
         if piece_color == 1:
             blue_piece_set.add(piece_id_list[index])
 
-    print(blue_piece_set)
     ii_state = II_State(blue_piece_set)
     return ii_state
 

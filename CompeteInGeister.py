@@ -287,6 +287,7 @@ import time
 from pv_mcts import predict, pv_mcts_scores, pv_mcts_action
 from pathlib import Path
 from tensorflow.keras.models import load_model
+from test import IIHandyAction
 
 
 # 価値の高い行動を愚直に選択し続ける
@@ -499,35 +500,46 @@ def evaluate_GeisterLog():
     del model
 
 
+# 推測+完全情報の方策を用いた行動決定
+def ci_pridict_action(ii_state, just_before_action_num):
+    just_before_enemy_action_num = just_before_action_num
+    # model = None
+    # Noneはモデルファイル(要らなくなったのでNoneにしてる。可読性を下げるので後程修正。)
+    guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
+        None, ii_state, just_before_enemy_action_num
+    )
+    return guess_player_action
+
+
 def evaluate_HandyGeister():
+    path = "10000.pth"
     global drow_count
     drow_count = 0
     win_player = [0, 0]
+    ii_handy_action = IIHandyAction("ii_models/" + path)
 
+    print("start compete : path/" + path)
     for _ in range(100):
         # 直前の行動を保管
-        just_before_action_num = 0
+        just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
+
         # 状態の生成
         state = State()
-        # ii_state = II_State({8, 10, 13, 15})
         ii_state = create_ii_state_from_state(state, True)
         model = None
 
-        # ゲーム終了までのループ
+        # ゲーム終了までループ
         while True:
-            # ゲーム終了時
             if state.is_done():
-                print(state)
                 break
 
-            # 次の状態の取得
+            # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
             if state.depth % 2 == 0:
-                just_before_action_num = random_action(state)  # ランダム
-                # just_before_action_num = mcts_action(state)  # モンテカルロ木探索(透視してくる)
+                # just_before_action_num = random_action(state)  # ランダム
                 # just_before_action_num = no_cheat_and_fix_mcts_action(
                 #     state
-                # )  # ズルなし固定なしモンテカルロ木探索
-                # print(just_before_action_num, state)
+                # )  # 固定なしモンテカルロ木探索
+                just_before_action_num = ii_handy_action(state)  # 不完全情報でそのまま学習したエージェント
                 if just_before_action_num == 2 or just_before_action_num == 22:
                     print("先手ゴール")
                     state.is_goal = True
@@ -535,18 +547,10 @@ def evaluate_HandyGeister():
                     break
                 state = state.next(just_before_action_num)
             else:
-                # 推測とかしながら行動するやつ
-                just_before_enemy_action_num = just_before_action_num
-                guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
-                    model, ii_state, just_before_enemy_action_num
+                # 推測+完全情報の方策を用いた行動決定
+                just_before_action_num = ci_pridict_action(
+                    ii_state, just_before_action_num
                 )
-                just_before_action_num = guess_player_action
-
-                # just_before_action_num = predict_action(
-                #     model, state
-                # )  # 愚直に方策が最大の行動を選択
-
-                # just_before_action_num = predict_mcts(state)  # 学習データを使ったMCTS
 
                 # just_before_action_num = random_action(state)
                 if just_before_action_num == 2 or just_before_action_num == 22:
@@ -559,6 +563,7 @@ def evaluate_HandyGeister():
         # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
         state.winner_checker(win_player)
         print(win_player)
+    print(drow_count)
 
 
 def main():
@@ -566,14 +571,12 @@ def main():
     state = State()
 
     ii_state = create_ii_state_from_state(state, True)
-    print(state)
-    print(ii_state)
-    # ii_state = GuessEnemyPiece.II_State({8, 9, 10, 11})
 
-    # GuessEnemyPieceに必要な処理
+    # modelの読み込みに必要な処理
     # path = sorted(Path("./model").glob("*.h5"))[-1]
-    path = "models/best.h5"
-    model = load_model(str(path))
+    # path = "models/best.h5"
+    # model = load_model(str(path))
+    model = None
 
     # 直前の行動を保管
     just_before_action_num = 0
@@ -629,6 +632,6 @@ def main():
 
 # 動作確認
 if __name__ == "__main__":
-    main()
+    # main()
     # evaluate_GeisterLog()
-    # evaluate_HandyGeister()
+    evaluate_HandyGeister()
