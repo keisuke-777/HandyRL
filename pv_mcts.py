@@ -1,7 +1,3 @@
-# ====================
-# モンテカルロ木探索の作成
-# ====================
-
 # パッケージのインポート
 from game import State
 from math import sqrt

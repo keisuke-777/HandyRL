@@ -9,11 +9,15 @@ import numpy as np
 import itertools
 import time
 from game import State
-from pv_mcts import predict
+
+# from pv_mcts import predict
 
 from pathlib import Path
 from tensorflow.keras.models import load_model
 
+from test import convert_func_use_in_guess
+
+model_path = "models/10000.pth"
 gamma = 0.9
 DN_INPUT_SHAPE = (6, 6, 4)
 
@@ -145,7 +149,7 @@ class II_State:
             index += 1
         np.sort(piece_coordinate_array)
 
-        print("my:self.all_piece", piece_coordinate_array)
+        # print("my:self.all_piece", piece_coordinate_array)
 
         for piece_coordinate in piece_coordinate_array:
             # 88以上は行動できないので省く(0~35)
@@ -175,7 +179,7 @@ class II_State:
             index += 1
         np.sort(piece_coordinate_array)
 
-        print("enemy:self.all_piece", piece_coordinate_array)
+        # print("enemy:self.all_piece", piece_coordinate_array)
 
         for piece_coordinate in piece_coordinate_array:
             # 88以上は行動できないので省く(0~35)
@@ -244,7 +248,7 @@ class II_State:
         if np.any(self.all_piece == coordinate_after):
             dead_piece_ID = np.where(self.all_piece == coordinate_after)[0][0]
             color_is_blue = np.any(self.real_my_piece_blue_set == dead_piece_ID)
-            print("(next)dead_piece_ID:", dead_piece_ID)
+            # print("(next)dead_piece_ID:", dead_piece_ID)
             reduce_pattern(dead_piece_ID, color_is_blue, self)
         self.all_piece[move_piece_index] = coordinate_after  # 駒の移動
 
@@ -367,7 +371,7 @@ def update_II_state(ii_state, before_coordinate, now_coordinate):
     if kill:
         dead_piece_ID = np.where(ii_state.all_piece == now_coordinate)[0][0]
         color_is_blue = np.any(ii_state.real_my_piece_blue_set == dead_piece_ID)
-        print(dead_piece_ID, color_is_blue)
+        # print(dead_piece_ID, color_is_blue)
         reduce_pattern(dead_piece_ID, color_is_blue, ii_state)
 
     # 行動前の座標を行動後の座標に変更する
@@ -442,6 +446,9 @@ def my_ii_predict(model, ii_state):
     policies_list = []
     legal_actions = list(ii_state.legal_actions())
 
+    # HandyRLで学習させた方策を取れる関数を定義
+    convert_func = convert_func_use_in_guess(model_path)
+
     for num_and_my_blue in ii_state.my_estimated_num:
         sum_np_policies = np.array([0] * len(legal_actions), dtype="f4")
 
@@ -461,14 +468,8 @@ def my_ii_predict(model, ii_state):
                 enemy_red_set,
             )
 
-            print(ii_pieces_array)
-
-            x = np.array(ii_pieces_array)
-            x = x.reshape(c, a, b).transpose(1, 2, 0).reshape(1, a, b, c)
-            y = model.predict(x, batch_size=1)  # 推論
-
-            policies = y[0][0][legal_actions]  # 合法手のみの方策の取得
-            policies /= sum(policies) if sum(policies) else 1  # 合計1の確率分布に変換
+            # HandyRLに適応
+            policies = convert_func(ii_pieces_array, legal_actions)
 
             # 行列演算するためにndarrayに変換
             np_policies = np.array(policies, dtype="f4")
@@ -490,6 +491,8 @@ def enemy_ii_predict(model, ii_state):
     policies_list = []
     enemy_legal_actions = list(ii_state.enemy_legal_actions())
 
+    convert_func = convert_func_use_in_guess(model_path)
+
     for num_and_enemy_blue in ii_state.enemy_estimated_num:  # enemyのパターンの確からしさを求めたい
         # 赤駒のインデックスをセット形式で獲得(my_blueはタプル)
         enemy_red_set = enemy_piece_set - set(num_and_enemy_blue[1])
@@ -506,17 +509,12 @@ def enemy_ii_predict(model, ii_state):
                 enemy_red_set,
             )
 
-            print(ii_pieces_array)
-
-            # 方策の算出
-            x = np.array(ii_pieces_array)
-            x = x.reshape(c, a, b).transpose(1, 2, 0).reshape(1, a, b, c)
-            y = model.predict(x, batch_size=1)
-            policies = y[0][0][enemy_legal_actions]  # 合法手のみ
-            policies /= sum(policies) if sum(policies) else 1  # 合計1の確率分布に変換
+            # HandyRLに適応
+            policies = convert_func(ii_pieces_array, enemy_legal_actions)
 
             # 行列演算するためにndarrayに変換
             np_policies = np.array(policies, dtype="f4")
+
             # myのパターンは既存のpoliciesに足すだけ
             sum_np_policies = sum_np_policies + np_policies
 
@@ -527,7 +525,7 @@ def enemy_ii_predict(model, ii_state):
 # 相手の行動から推測値を更新
 # state, enemy_ii_predictで作成した推測値の行列, 敵の行動番号
 def update_predict_num_all(ii_state, beforehand_estimated_num, enemy_action_num):
-    print(enemy_action_num)
+    # print(enemy_action_num)
     enemy_legal_actions = list(ii_state.enemy_legal_actions())
     enemy_action_index = enemy_legal_actions.index(enemy_action_num)
 
@@ -599,6 +597,8 @@ def action_decision(model, ii_state):
 
     actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
 
+    convert_func = convert_func_use_in_guess(model_path)
+
     # 相手の70パターンについてforループ(自分のパターンは確定で計算)
     for num_and_enemy_blue in ii_state.enemy_estimated_num:
         enemy_blue_set = set(num_and_enemy_blue[1])
@@ -613,13 +613,7 @@ def action_decision(model, ii_state):
             enemy_red_set,
         )
 
-        x = np.array(ii_pieces_array)
-        x = x.reshape(c, a, b).transpose(1, 2, 0).reshape(1, a, b, c)
-        y = model.predict(x, batch_size=1)
-
-        # 方策の取得
-        policies = y[0][0][legal_actions]  # 合法手のみ
-        policies /= sum(policies) if sum(policies) else 1  # 合計1の確率分布に変換
+        policies = convert_func(ii_pieces_array, legal_actions)
 
         # 行列演算するためにndarrayに変換
         np_policies = np.array(policies, dtype="f4")
@@ -682,10 +676,10 @@ def guess_enemy_piece_player(model, ii_state, before_tcp_str, now_tcp_str):
 # デバッグ用(tcpを受けずに直接行動番号を受ける)(これを正式にして本家を分家にした方が良いのでは)
 def guess_enemy_piece_player_for_debug(model, ii_state, just_before_enemy_action_num):
     # 相手の盤面から全ての行動の推測値を計算しておく
-    print("推測値を算出中")
+    # print("推測値を算出中")
     beforehand_estimated_num = enemy_ii_predict(model, ii_state)
 
-    print("敵の行動番号", just_before_enemy_action_num, sep=":")
+    # print("敵の行動番号", just_before_enemy_action_num, sep=":")
 
     # ここら辺怪しすぎる
     # 実際に取られた行動から推測値を更新
@@ -694,17 +688,17 @@ def guess_enemy_piece_player_for_debug(model, ii_state, just_before_enemy_action
     )
 
     # 相手の行動からボードを更新
-    print("ボード更新中")
+    # print("ボード更新中")
     before, now = action_to_coordinate(just_before_enemy_action_num)
     my_find_before = 35 - before  # このままでは相手視点の座標なので、自分視点の座標に変換
     my_find_now = 35 - now  # 同様に変換
-    print(my_find_before, my_find_now)
+    # print(my_find_before, my_find_now)
     kill = update_II_state(ii_state, my_find_before, my_find_now)  # 相手の行動をボードに反映
 
     # 行動を決定
-    print("行動を決定中")
+    # print("行動を決定中")
     action_num = action_decision(model, ii_state)
-    print("行動番号", action_num, sep=":")
+    # print("行動番号", action_num, sep=":")
 
     # 行動を受けて自分の推測値を更新
     # beforehand_my_estimated_num = my_ii_predict(model, ii_state)

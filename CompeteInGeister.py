@@ -25,27 +25,37 @@ class State:
         # 駒の初期配置
         if pieces == None or enemy_pieces == None:
             # 青4赤4z
-            piece_list = [1, 1, 1, 1, 2, 2, 2, 2]
+            # piece_list = [1, 1, 1, 1, 2, 2, 2, 2]
 
-            random.shuffle(piece_list)  # 配置をランダムに
-            self.pieces[25] = piece_list[0]
-            self.pieces[26] = piece_list[1]
-            self.pieces[27] = piece_list[2]
-            self.pieces[28] = piece_list[3]
-            self.pieces[31] = piece_list[4]
-            self.pieces[32] = piece_list[5]
-            self.pieces[33] = piece_list[6]
-            self.pieces[34] = piece_list[7]
+            # random.shuffle(piece_list)  # 配置をランダムに
+            # self.pieces[25] = piece_list[0]
+            # self.pieces[26] = piece_list[1]
+            # self.pieces[27] = piece_list[2]
+            # self.pieces[28] = piece_list[3]
+            # self.pieces[31] = piece_list[4]
+            # self.pieces[32] = piece_list[5]
+            # self.pieces[33] = piece_list[6]
+            # self.pieces[34] = piece_list[7]
 
-            random.shuffle(piece_list)  # 配置をランダムに
-            self.enemy_pieces[25] = piece_list[0]
-            self.enemy_pieces[26] = piece_list[1]
-            self.enemy_pieces[27] = piece_list[2]
-            self.enemy_pieces[28] = piece_list[3]
-            self.enemy_pieces[31] = piece_list[4]
-            self.enemy_pieces[32] = piece_list[5]
-            self.enemy_pieces[33] = piece_list[6]
-            self.enemy_pieces[34] = piece_list[7]
+            # random.shuffle(piece_list)  # 配置をランダムに
+            # self.enemy_pieces[25] = piece_list[0]
+            # self.enemy_pieces[26] = piece_list[1]
+            # self.enemy_pieces[27] = piece_list[2]
+            # self.enemy_pieces[28] = piece_list[3]
+            # self.enemy_pieces[31] = piece_list[4]
+            # self.enemy_pieces[32] = piece_list[5]
+            # self.enemy_pieces[33] = piece_list[6]
+            # self.enemy_pieces[34] = piece_list[7]
+
+            # 実験用(データとりではランダムにする)
+            self.pieces[25] = self.enemy_pieces[25] = 1
+            self.pieces[26] = self.enemy_pieces[26] = 2
+            self.pieces[27] = self.enemy_pieces[27] = 1
+            self.pieces[28] = self.enemy_pieces[28] = 2
+            self.pieces[31] = self.enemy_pieces[31] = 2
+            self.pieces[32] = self.enemy_pieces[32] = 1
+            self.pieces[33] = self.enemy_pieces[33] = 2
+            self.pieces[34] = self.enemy_pieces[34] = 1
 
     # 負けかどうか
     def is_lose(self):
@@ -271,6 +281,7 @@ def human_player_action(state):
 
 
 import GuessEnemyPiece
+from GuessEnemyPiece import II_State
 import numpy as np
 import itertools
 import time
@@ -447,11 +458,11 @@ def evaluate_GeisterLog():
 
                 # 次の状態の取得
                 if state.depth % 2 == 0:
-                    # just_before_action_num = random_action(state)  # ランダム
+                    just_before_action_num = random_action(state)  # ランダム
                     # just_before_action_num = mcts_action(state)  # モンテカルロ木探索
-                    just_before_action_num = no_cheat_mcts_action(
-                        state
-                    )  # ズルなしモンテカルロ木探索
+                    # just_before_action_num = no_cheat_mcts_action(
+                    #     state
+                    # )  # ズルなしモンテカルロ木探索
                     # just_before_action_num = no_cheat_and_fix_mcts_action(
                     #     state
                     # )  # ズルなし固定なしモンテカルロ木探索
@@ -475,6 +486,12 @@ def evaluate_GeisterLog():
                         state.is_goal = True
                         state.goal_player = 1
                         break
+                    # もしかすると外に出る行動全部OKになっているのではという不安
+                    if just_before_action_num == 1 or just_before_action_num == 23:
+                        print("大バグ バグ男")
+                        state.is_goal = True
+                        state.goal_player = 1
+                        break
                     state = state.next(just_before_action_num)
             state.winner_checker(win_player)
             print(win_player)
@@ -483,12 +500,74 @@ def evaluate_GeisterLog():
     del model
 
 
+def evaluate_HandyGeister():
+    global drow_count
+    drow_count = 0
+    win_player = [0, 0]
+
+    for _ in range(100):
+        # 直前の行動を保管
+        just_before_action_num = 0
+        # 状態の生成
+        state = State()
+        ii_state = II_State({8, 10, 13, 15})
+        model = None
+
+        # ゲーム終了までのループ
+        while True:
+            # ゲーム終了時
+            if state.is_done():
+                print(state)
+                break
+
+            # 次の状態の取得
+            if state.depth % 2 == 0:
+                just_before_action_num = random_action(state)  # ランダム
+                # just_before_action_num = mcts_action(state)  # モンテカルロ木探索(透視してくる)
+                # just_before_action_num = no_cheat_and_fix_mcts_action(
+                #     state
+                # )  # ズルなし固定なしモンテカルロ木探索
+                # print(just_before_action_num, state)
+                if just_before_action_num == 2 or just_before_action_num == 22:
+                    print("先手ゴール")
+                    state.is_goal = True
+                    state.goal_player = 0
+                    break
+                state = state.next(just_before_action_num)
+            else:
+                # 推測とかしながら行動するやつ
+                just_before_enemy_action_num = just_before_action_num
+                guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
+                    model, ii_state, just_before_enemy_action_num
+                )
+                just_before_action_num = guess_player_action
+
+                # just_before_action_num = predict_action(
+                #     model, state
+                # )  # 愚直に方策が最大の行動を選択
+
+                # just_before_action_num = predict_mcts(state)  # 学習データを使ったMCTS
+
+                # just_before_action_num = random_action(state)
+                if just_before_action_num == 2 or just_before_action_num == 22:
+                    print("後手ゴール", just_before_action_num)
+                    state.is_goal = True
+                    state.goal_player = 1
+                    break
+                state = state.next(just_before_action_num)
+
+        # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
+        state.winner_checker(win_player)
+        print(win_player)
+
+
 def main():
     # 状態の生成
     state = State()
 
     # GuessEnemyPieceに必要な処理
-    path = sorted(Path("./model").glob("*.h5"))[-1]
+    # path = sorted(Path("./model").glob("*.h5"))[-1]
+    path = "models/best.h5"
     model = load_model(str(path))
     ii_state = GuessEnemyPiece.II_State({8, 9, 10, 11})
 
@@ -521,13 +600,21 @@ def main():
             )
             just_before_action_num = guess_player_action
             # print("自作AIの行動番号", just_before_action_num)
+            if just_before_action_num == 2 or just_before_action_num == 22:
+                state.is_goal = True
+                state.goal_player = 0
+                break
             state = state.next(just_before_action_num)
 
-            just_before_action_num = random_action(state)
-            # print("敵(ランダムAI)の行動番号", just_before_action_num)
-            state = state.next(just_before_action_num)
+            # just_before_action_num = random_action(state)
+            # # print("敵(ランダムAI)の行動番号", just_before_action_num)
+            # state = state.next(just_before_action_num)
         else:
             just_before_action_num = random_action(state)
+            if just_before_action_num == 2 or just_before_action_num == 22:
+                state.is_goal = True
+                state.goal_player = 1
+                break
             # print("ランダムAIの行動番号", just_before_action_num)
             state = state.next(just_before_action_num)
 
@@ -539,4 +626,5 @@ def main():
 # 動作確認
 if __name__ == "__main__":
     # main()
-    evaluate_GeisterLog()
+    # evaluate_GeisterLog()
+    evaluate_HandyGeister()
