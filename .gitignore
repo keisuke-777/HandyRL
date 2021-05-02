@@ -1,3 +1,6 @@
 .DS_Store
 *.pyc
 *.pth
+
+models/*
+ii_models/*
