@@ -527,7 +527,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
         ii_handy_action = IIHandyAction(ii_model_path)
 
         print("start compete : (path) " + path)
-        for _ in range(100):
+        for _ in range(10):
             # 直前の行動を保管
             just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
 
@@ -572,8 +572,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
 
             # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
             state.winner_checker(win_player)
-            print(win_player)
-        print(drow_count)
+        print(win_player)
 
 
 def main():
