@@ -507,82 +507,16 @@ def measure_estimate_accuracy(ii_state, state, csvWriter=None):
         )
 
 
-# logのやつの戦闘データ一気にとる
-drow_count = 0
-
-
-def evaluate_GeisterLog():
-    global drow_count
-    for i in range(1, 10):
-        drow_count = 0
-        model_pass_str = "./AllLogFile/" + str(i) + ".h5"
-        model = load_model(model_pass_str)
-        win_player = [0, 0]
-        for _ in range(100):
-            # 直前の行動を保管
-            just_before_action_num = 0
-            # 状態の生成
-            state = State()
-
-            predict_mcts = pv_mcts_action(model)
-
-            # ゲーム終了までのループ
-            while True:
-                # ゲーム終了時
-                if state.is_done():
-                    break
-
-                # 次の状態の取得
-                if state.depth % 2 == 0:
-                    just_before_action_num = random_action(state)  # ランダム
-                    # just_before_action_num = mcts_action(state)  # モンテカルロ木探索
-                    # just_before_action_num = no_cheat_mcts_action(
-                    #     state
-                    # )  # ズルなしモンテカルロ木探索
-                    # just_before_action_num = no_cheat_and_fix_mcts_action(
-                    #     state
-                    # )  # ズルなし固定なしモンテカルロ木探索
-                    if just_before_action_num == 2 or just_before_action_num == 22:
-                        state.is_goal = True
-                        state.goal_player = 0
-                        break
-                    state = state.next(just_before_action_num)
-                else:
-                    # just_before_enemy_action_num = just_before_action_num
-                    # guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
-                    #     model, ii_state, just_before_enemy_action_num
-                    # )
-                    # just_before_action_num = guess_player_action
-
-                    just_before_action_num = predict_mcts(state)  # 学習データを使ったMCTS
-                    if just_before_action_num == 2 or just_before_action_num == 22:
-                        state.is_goal = True
-                        state.goal_player = 1
-                        break
-                    # もしかすると外に出る行動全部OKになっているのではという不安
-                    if just_before_action_num == 1 or just_before_action_num == 23:
-                        print("大バグ バグ男")
-                        state.is_goal = True
-                        state.goal_player = 1
-                        break
-                    state = state.next(just_before_action_num)
-            state.winner_checker(win_player)
-            print(win_player)
-        print("[log_player,mcts]:", win_player)
-    K.clear_session()
-    del model
-
-
 # 推測+完全情報の方策を用いた行動決定
-def ci_pridict_action(ii_state, just_before_action_num, model_path):
+def ci_pridict_action(ii_state, just_before_action_num, model_path, gamma):
     just_before_enemy_action_num = just_before_action_num
     guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
-        model_path, ii_state, just_before_enemy_action_num
+        model_path, ii_state, just_before_enemy_action_num, gamma
     )
     return guess_player_action
 
 
-def evaluate_HandyGeister(path_list=["latest"]):
+def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
     global drow_count
     for path in path_list:
         ii_model_path = "ii_models/" + path + ".pth"
@@ -623,7 +557,7 @@ def evaluate_HandyGeister(path_list=["latest"]):
                 else:
                     # 推測+完全情報の方策を用いた行動決定
                     just_before_action_num = ci_pridict_action(
-                        ii_state, just_before_action_num, ci_model_path
+                        ii_state, just_before_action_num, ci_model_path, gamma
                     )
                     # just_before_action_num = random_action(state)  # ランダム
                     # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
@@ -675,7 +609,7 @@ def main():
         if state.depth % 2 == 1:
             just_before_enemy_action_num = just_before_action_num
             guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
-                model_path, ii_state, just_before_enemy_action_num
+                model_path, ii_state, just_before_enemy_action_num, gamma
             )
             just_before_action_num = guess_player_action
             # print("自作AIの行動番号", just_before_action_num)
@@ -707,5 +641,25 @@ if __name__ == "__main__":
     # main()
     # evaluate_GeisterLog()
     # path_list = ["1", "3000", "5000", "10000"]
-    path_list = ["15000"]
-    evaluate_HandyGeister(path_list)
+    path_list = ["20000"]
+    print("0.1だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.1)
+    print("0.2だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.2)
+    print("0.3だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.3)
+    print("0.4だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.4)
+    print("0.5だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.5)
+    print("0.6だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.6)
+    print("0.7だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.7)
+    print("0.8だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.8)
+    print("0.9だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.9)
+    print("1.0だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 1.0)
+

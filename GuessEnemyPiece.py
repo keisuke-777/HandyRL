@@ -17,8 +17,8 @@ from tensorflow.keras.models import load_model
 
 from test import convert_func_use_in_guess
 
-model_path = "models/10000.pth"
-gamma = 0.9
+# model_path = "models/10000.pth"
+default_gamma = 0.9
 DN_INPUT_SHAPE = (6, 6, 4)
 
 # おそらく不完全情報ガイスター(のstateのみ？)を定義してそれを更新して管理した方がよさげ
@@ -242,7 +242,6 @@ class II_State:
         # 青駒のゴール行動の可否は1ターンに1度だけ判定すれば良いので、例外的にlegal_actionsで処理する(ここでは処理しない)
         return actions
 
-    # 思いっきりバグあり(myからしか駒を探してない)
     # 行動を受けて、次の状態に遷移
     def next(self, action_num):
         coordinate_before, coordinate_after = action_to_coordinate(action_num)
@@ -251,9 +250,17 @@ class II_State:
         # 移動先に駒が存在する場合は殺す(味方の駒も殺してしまうが、そこは行動側で制御)
         if np.any(self.all_piece == coordinate_after):
             dead_piece_ID = np.where(self.all_piece == coordinate_after)[0][0]
-            color_is_blue = np.any(self.real_my_piece_blue_set == dead_piece_ID)
-            # print("(next)dead_piece_ID:", dead_piece_ID)
-            reduce_pattern(dead_piece_ID, color_is_blue, self)
+            if dead_piece_ID < 8:  # 死んだのが敵駒
+                # color_is_blue:死んだのが青駒かどうか
+                color_is_blue = any(
+                    i == dead_piece_ID for i in self.real_enemy_piece_blue_set
+                )
+                reduce_pattern(dead_piece_ID, color_is_blue, self)
+            else:  # 死んだのが味方の駒
+                color_is_blue = any(
+                    i == dead_piece_ID for i in self.real_my_piece_blue_set
+                )
+                reduce_pattern(dead_piece_ID, color_is_blue, self)
         self.all_piece[move_piece_index] = coordinate_after  # 駒の移動
 
     # 推測値を返す(主にデバッグ用)
@@ -301,9 +308,11 @@ class II_State:
 
         # 自分の駒
         for blue_index in self.real_my_piece_blue_set:
-            board[self.all_piece[blue_index]] = 1
+            if self.all_piece[blue_index] < 36 and self.all_piece[blue_index] >= 0:
+                board[self.all_piece[blue_index]] = 1
         for red_index in self.real_my_piece_red_set:
-            board[self.all_piece[red_index]] = 2
+            if self.all_piece[red_index] < 36 and self.all_piece[red_index] >= 0:
+                board[self.all_piece[red_index]] = 2
 
         board_essence = []
         for i in board:
@@ -623,7 +632,9 @@ def enemy_ii_predict(model_path, ii_state):
 
 # 相手の行動から推測値を更新
 # state, enemy_ii_predictで作成した推測値の行列, 敵の行動番号
-def update_predict_num_all(ii_state, beforehand_estimated_num, enemy_action_num):
+def update_predict_num_all(
+    ii_state, beforehand_estimated_num, enemy_action_num, gamma=default_gamma
+):
     # print(enemy_action_num)
     enemy_legal_actions = list(ii_state.enemy_legal_actions())
     enemy_action_index = enemy_legal_actions.index(enemy_action_num)
@@ -638,24 +649,25 @@ def update_predict_num_all(ii_state, beforehand_estimated_num, enemy_action_num)
 # 駒の死亡処理
 # 既存のパターンから推測値を抜き出して新しい推測値を作成
 def reduce_pattern(dead_piece_ID, color_is_blue: bool, ii_state):
+    # print(dead_piece_ID, color_is_blue, ii_state)
     if dead_piece_ID < 8 and color_is_blue:  # 敵駒 and 駒が青色
-        # dead_piece_IDが含まれているものを削除
+        # dead_piece_IDが含まれていないものを削除(dead_piece_IDが青色で確定するため、それが青色の駒のリストに含まれていないとおかしい)
         # リストをそのままfor内で削除するとインデックスがバグるのでコピーしたものを参照
-        for enemy_estimated_num in ii_state.enemy_estimated_num[:]:
-            if dead_piece_ID in enemy_estimated_num[1]:
-                ii_state.enemy_estimated_num.remove(enemy_estimated_num)
-    elif dead_piece_ID < 8 and not color_is_blue:  # 敵駒 and 駒が赤色
-        # dead_piece_IDが含まれていないものを削除
         for enemy_estimated_num in ii_state.enemy_estimated_num[:]:
             if dead_piece_ID not in enemy_estimated_num[1]:
                 ii_state.enemy_estimated_num.remove(enemy_estimated_num)
+    elif dead_piece_ID < 8 and not color_is_blue:  # 敵駒 and 駒が赤色
+        # dead_piece_IDが含まれているものを削除
+        for enemy_estimated_num in ii_state.enemy_estimated_num[:]:
+            if dead_piece_ID in enemy_estimated_num[1]:
+                ii_state.enemy_estimated_num.remove(enemy_estimated_num)
     elif dead_piece_ID >= 8 and color_is_blue:  # 自駒 and 駒が青色
         for my_estimated_num in ii_state.my_estimated_num[:]:
-            if dead_piece_ID in my_estimated_num[1]:
+            if dead_piece_ID not in my_estimated_num[1]:
                 ii_state.my_estimated_num.remove(my_estimated_num)
     elif dead_piece_ID >= 8 and not color_is_blue:  # 自駒 and 駒が赤色
         for my_estimated_num in ii_state.my_estimated_num[:]:
-            if dead_piece_ID not in my_estimated_num[1]:
+            if dead_piece_ID in my_estimated_num[1]:
                 ii_state.my_estimated_num.remove(my_estimated_num)
 
     # all_pieceから削除
@@ -681,7 +693,7 @@ def reduce_pattern(dead_piece_ID, color_is_blue: bool, ii_state):
         print("ERROR:reduce_pattern(living_piece_colorから削除)")
 
 
-# 相手の推測値を使って無難な手を選択
+# 相手の推測値を使って無難な手を選択(元祖)
 # 価値が最大の行動番号を返す
 def action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
@@ -700,6 +712,53 @@ def action_decision(model_path, ii_state):
 
     # 相手の70パターンについてforループ(自分のパターンは確定で計算)
     for num_and_enemy_blue in ii_state.enemy_estimated_num:
+        enemy_blue_set = set(num_and_enemy_blue[1])
+        enemy_red_set = enemy_piece_set - enemy_blue_set
+
+        # 盤面を6*6*4次元の情報に変換
+        ii_pieces_array = my_looking_create_state(
+            ii_state,
+            real_my_piece_blue_set,
+            real_my_piece_red_set,
+            enemy_blue_set,
+            enemy_red_set,
+        )
+
+        policies = convert_func(ii_pieces_array, legal_actions)
+
+        # 行列演算するためにndarrayに変換
+        np_policies = np.array(policies, dtype="f4")
+
+        # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
+        actions_value_sum_list = actions_value_sum_list + (
+            np_policies * num_and_enemy_blue[0]
+        )
+
+    best_action_index = np.argmax(actions_value_sum_list)  # 最大値のインデックスを取得
+    best_action = legal_actions[best_action_index]  # 価値が最大の行動を取得
+    return best_action
+
+
+# 上位半分のみの世界しか考えない
+def hoge_action_decision(model_path, ii_state):
+    a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
+    my_piece_set = set(ii_state.my_piece_list)
+    enemy_piece_set = set(ii_state.enemy_piece_list)
+
+    # 自分の駒配置を取得(確定)
+    real_my_piece_blue_set = ii_state.real_my_piece_blue_set
+    real_my_piece_red_set = ii_state.real_my_piece_red_set
+    legal_actions = list(ii_state.legal_actions())
+    actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
+    convert_func = convert_func_use_in_guess(model_path)
+
+    # 価値が上位の世界を抽出
+    en_est_num = ii_state.enemy_estimated_num.copy()
+    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+    sorted_en_est_num = sorted_en_est_num[0 : 1 + (len(sorted_en_est_num) // 4)]
+
+    # 相手の70パターンについてforループ(自分のパターンは確定で計算)
+    for num_and_enemy_blue in sorted_en_est_num:
         enemy_blue_set = set(num_and_enemy_blue[1])
         enemy_red_set = enemy_piece_set - enemy_blue_set
 
@@ -754,10 +813,10 @@ def value_ranking_by_board(beforehand_estimated_num, action_num, ii_state):
         if en_est[1] == tuple(ii_state.real_enemy_piece_blue_set):
             real_rank = index
 
-    print("real_set:", tuple(ii_state.real_enemy_piece_blue_set))
-    print("action_num:", action_num)
+    # print("real_set:", tuple(ii_state.real_enemy_piece_blue_set))
+    # print("action_num:", action_num)
     print("real_rank:", real_rank)
-    print(len(sorted_en_est_num))
+    # print(len(sorted_en_est_num))
     print(sorted_en_est_num)
 
     # print(real_board_rank)
@@ -765,7 +824,9 @@ def value_ranking_by_board(beforehand_estimated_num, action_num, ii_state):
 
 
 # 行動の一連の処理でii_stateを更新する
-def guess_enemy_piece_player(model_path, ii_state, before_tcp_str, now_tcp_str):
+def guess_enemy_piece_player(
+    model_path, ii_state, before_tcp_str, now_tcp_str, gamma=default_gamma
+):
     # 相手の盤面から全ての行動の推測値を計算しておく
     print("推測値を算出中")
     beforehand_estimated_num = enemy_ii_predict(model_path, ii_state)
@@ -781,7 +842,7 @@ def guess_enemy_piece_player(model_path, ii_state, before_tcp_str, now_tcp_str):
 
     # 実際に取られた行動から推測値を更新
     print("推測値を更新中")
-    update_predict_num_all(ii_state, beforehand_estimated_num, enemy_action_num)
+    update_predict_num_all(ii_state, beforehand_estimated_num, enemy_action_num, gamma)
 
     # 相手の行動からボードを更新
     print("ボード更新中")
@@ -805,21 +866,30 @@ def guess_enemy_piece_player(model_path, ii_state, before_tcp_str, now_tcp_str):
 
 # デバッグ用(tcpを受けずに直接行動番号を受ける)(これを正式にして本家を分家にした方が良いのでは)
 def guess_enemy_piece_player_for_debug(
-    model_path, ii_state, just_before_enemy_action_num
+    model_path, ii_state, just_before_enemy_action_num, gamma
 ):
     # 相手の盤面から全ての行動の推測値を計算しておく
     # print("推測値を算出中")
     beforehand_estimated_num = enemy_ii_predict(model_path, ii_state)
 
     # print("敵の行動番号", just_before_enemy_action_num, sep=":")
-    value_ranking_by_board(
-        beforehand_estimated_num, just_before_enemy_action_num, ii_state
-    )
+    # value_ranking_by_board(
+    #     beforehand_estimated_num, just_before_enemy_action_num, ii_state
+    # )
+
+    # print("盤面：", ii_state)
+    # print("実際の青駒：", ii_state.real_enemy_piece_blue_set)
+    # en_est_num = ii_state.enemy_estimated_num.copy()
+    # sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+    # print("推測値：", sorted_en_est_num)
+    # value_ranking_by_board(
+    #     beforehand_estimated_num, just_before_enemy_action_num, ii_state
+    # )
 
     # ここら辺怪しすぎる
     # 実際に取られた行動から推測値を更新
     update_predict_num_all(
-        ii_state, beforehand_estimated_num, just_before_enemy_action_num
+        ii_state, beforehand_estimated_num, just_before_enemy_action_num, gamma
     )
 
     # 相手の行動からボードを更新
