@@ -49,6 +49,7 @@ class II_State:
     def __init__(
         self,
         real_my_piece_blue_set,
+        real_enemy_piece_blue_set=None,
         all_piece=None,
         enemy_estimated_num=None,
         my_estimated_num=None,
@@ -98,6 +99,9 @@ class II_State:
         self.real_my_piece_red_set = (
             set(self.my_piece_list) - self.real_my_piece_blue_set
         )
+
+        # 敵の青駒のセット(デバッグ用)
+        self.real_enemy_piece_blue_set = real_enemy_piece_blue_set
 
         # {敵青, 敵赤, 自青,　自赤}
         if living_piece_color == None:
@@ -252,6 +256,35 @@ class II_State:
             reduce_pattern(dead_piece_ID, color_is_blue, self)
         self.all_piece[move_piece_index] = coordinate_after  # 駒の移動
 
+    # 推測値を返す(主にデバッグ用)
+    def return_estimate_value(self):
+        estimate_value = np.array([0] * 8, dtype="f4")
+        for elem in self.enemy_estimated_num:
+            id_matrix = [0] * 8
+            # 青駒IDのとこだけ1にする
+            for blue_id in elem[1]:
+                id_matrix[blue_id] = 1
+            estimate_value = estimate_value + (
+                np.array(id_matrix, dtype="f4") * elem[0]
+            )
+        if False:
+            print(self.enemy_estimated_num)
+            print(
+                "敵駒の住所",
+                self.all_piece[0],
+                self.all_piece[1],
+                self.all_piece[2],
+                self.all_piece[3],
+            )
+            print(
+                "味方駒の住所",
+                self.all_piece[4],
+                self.all_piece[5],
+                self.all_piece[6],
+                self.all_piece[7],
+            )
+        return estimate_value
+
     # ボードの文字列表示
     def __str__(self):
         row = "|{}|{}|{}|{}|{}|{}|"
@@ -295,8 +328,11 @@ def create_ii_state_from_state(state, enemy_view=False):
     if enemy_view:
         # 敵視点でii_stateを作成
         pieces = state.enemy_pieces
+        enemy_pieces = state.pieces
     else:
         pieces = state.pieces
+        enemy_pieces = state.enemy_pieces
+
     # 駒のIDと座標が紐づいたリストを手動作成(初期配置では座標番号25~28と31~34に駒が存在)
     piece_id_list = [0] * 36
     for i in range(4):
@@ -309,7 +345,25 @@ def create_ii_state_from_state(state, enemy_view=False):
         if piece_color == 1:
             blue_piece_set.add(piece_id_list[index])
 
-    ii_state = II_State(blue_piece_set)
+    # 敵駒の処理も同様にする
+    enemy_piece_id_list = [0] * 36
+    for i in range(4):
+        enemy_piece_id_list[25 + i] = 8 + i
+    for i in range(4):
+        enemy_piece_id_list[31 + i] = 12 + i
+
+    enemy_blue_piece_set = set({})
+    for index, piece_color in enumerate(enemy_pieces):
+        if piece_color == 1:
+            enemy_blue_piece_set.add(enemy_piece_id_list[index])
+
+    # enemy_blue_piece_setの値を反転させ、推測の際に扱いやすいように変換する
+    # (このままでは8~15の値をとるが、0~7の値に修正し扱う必要がある)
+    rev_enemy_blue_piece_set = set({})
+    for piece_coo in enemy_blue_piece_set:
+        rev_enemy_blue_piece_set.add(15 - piece_coo)
+
+    ii_state = II_State(blue_piece_set, rev_enemy_blue_piece_set)
     return ii_state
 
 
@@ -458,7 +512,7 @@ def enemy_looking_create_state(ii_state, my_blue, my_red, enemy_blue, enemy_red)
 # enemy→各駒の推測値を保存。推測のために70パターン想定するが、足し合わせるだけ(各盤面について保存はしない)
 # my→推測したい駒配置。
 # 行動と推測盤面に対応した行動価値のリストを返す
-def my_ii_predict(model, ii_state):
+def my_ii_predict(model_path, ii_state):
     # 推論のための入力データのシェイプの変換
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
 
@@ -506,43 +560,64 @@ def my_ii_predict(model, ii_state):
     return policies_list
 
 
-# 相手の行動前に、相手の目線で各パターンにおける各行動の価値を算出
-def enemy_ii_predict(model, ii_state):
-    a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
+# # 相手の行動前に、相手の目線で各パターンにおける各行動の価値を算出
+# def enemy_ii_predict(model_path, ii_state):
+#     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
+#     my_piece_set = set(ii_state.my_piece_list)
+#     enemy_piece_set = set(ii_state.enemy_piece_list)
+#     policies_list = []
+#     enemy_legal_actions = list(ii_state.enemy_legal_actions())
+#     convert_func = convert_func_use_in_guess(model_path)
+#     for num_and_enemy_blue in ii_state.enemy_estimated_num:  # enemyのパターンの確からしさを求めたい
+#         # 赤駒のインデックスをセット形式で獲得(my_blueはタプル)
+#         enemy_red_set = enemy_piece_set - set(num_and_enemy_blue[1])
+#         sum_np_policies = np.array([0] * len(enemy_legal_actions), dtype="f4")
+#         for num_and_my_blue in ii_state.my_estimated_num:
+#             my_red_set = my_piece_set - set(num_and_my_blue[1])
+#             # 要修正
+#             ii_pieces_array = enemy_looking_create_state(
+#                 ii_state,
+#                 num_and_my_blue[1],
+#                 my_red_set,
+#                 num_and_enemy_blue[1],
+#                 enemy_red_set,
+#             )
+#             # HandyRLに適応
+#             policies = convert_func(ii_pieces_array, enemy_legal_actions)
+#             # 行列演算するためにndarrayに変換
+#             np_policies = np.array(policies, dtype="f4")
+#             # myのパターンは既存のpoliciesに足すだけ
+#             sum_np_policies = sum_np_policies + np_policies
+#         policies_list.extend([sum_np_policies])
+#     return policies_list
 
+# 自分の駒配置を確定で試してみる（うまくいけばこちらを採用）
+# 相手の行動前に、相手の目線で各パターンにおける各行動の価値を算出
+def enemy_ii_predict(model_path, ii_state):
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
     policies_list = []
     enemy_legal_actions = list(ii_state.enemy_legal_actions())
-
     convert_func = convert_func_use_in_guess(model_path)
 
-    for num_and_enemy_blue in ii_state.enemy_estimated_num:  # enemyのパターンの確からしさを求めたい
+    # enemyのパターンの確からしさ(蓋然性)を求める
+    for num_and_enemy_blue in ii_state.enemy_estimated_num:
         # 赤駒のインデックスをセット形式で獲得(my_blueはタプル)
         enemy_red_set = enemy_piece_set - set(num_and_enemy_blue[1])
-        sum_np_policies = np.array([0] * len(enemy_legal_actions), dtype="f4")
-        for num_and_my_blue in ii_state.my_estimated_num:
-            my_red_set = my_piece_set - set(num_and_my_blue[1])
 
-            # 要修正
-            ii_pieces_array = enemy_looking_create_state(
-                ii_state,
-                num_and_my_blue[1],
-                my_red_set,
-                num_and_enemy_blue[1],
-                enemy_red_set,
-            )
+        # 自分の駒配置は見抜かれているものとして相手の行動の価値を求める
+        my_blue_set = ii_state.real_my_piece_blue_set
+        my_red_set = my_piece_set - my_blue_set
+        ii_pieces_array = enemy_looking_create_state(
+            ii_state, my_blue_set, my_red_set, num_and_enemy_blue[1], enemy_red_set,
+        )
 
-            # HandyRLに適応
-            policies = convert_func(ii_pieces_array, enemy_legal_actions)
+        # HandyRLに適応
+        policies = convert_func(ii_pieces_array, enemy_legal_actions)
 
-            # 行列演算するためにndarrayに変換
-            np_policies = np.array(policies, dtype="f4")
-
-            # myのパターンは既存のpoliciesに足すだけ
-            sum_np_policies = sum_np_policies + np_policies
-
-        policies_list.extend([sum_np_policies])
+        # ndarrayに変換(自分の駒配置が確定でなかった際に、行列演算するためにnpに変換していた名残)
+        np_policies = np.array(policies, dtype="f4")
+        policies_list.extend([np_policies])
     return policies_list
 
 
@@ -608,7 +683,7 @@ def reduce_pattern(dead_piece_ID, color_is_blue: bool, ii_state):
 
 # 相手の推測値を使って無難な手を選択
 # 価値が最大の行動番号を返す
-def action_decision(model, ii_state):
+def action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -658,11 +733,42 @@ def teleport(ii_state, before, now):
     ii_state.all_piece[name] = now
 
 
+# 相手の打った手の価値(方策)を盤面ごとに調査し、ランキング形式でプリントする関数
+# 実際の盤面は何位なのか、トップの盤面の形などを出力すると良い？
+def value_ranking_by_board(beforehand_estimated_num, action_num, ii_state):
+    # 行動番号からインデックスを取得
+    enemy_legal_actions = list(ii_state.enemy_legal_actions())
+    enemy_action_index = enemy_legal_actions.index(action_num)
+    en_est_num = ii_state.enemy_estimated_num.copy()
+
+    for index, (action_value_list, prenum_tuple) in enumerate(
+        zip(beforehand_estimated_num, en_est_num)
+    ):
+        prenum_tuple[0] = action_value_list[enemy_action_index]
+
+    # 価値の高い順にen_est_numをソートする
+    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+
+    real_rank = -1
+    for index, en_est in enumerate(sorted_en_est_num):
+        if en_est[1] == tuple(ii_state.real_enemy_piece_blue_set):
+            real_rank = index
+
+    print("real_set:", tuple(ii_state.real_enemy_piece_blue_set))
+    print("action_num:", action_num)
+    print("real_rank:", real_rank)
+    print(len(sorted_en_est_num))
+    print(sorted_en_est_num)
+
+    # print(real_board_rank)
+    # print(top_board)
+
+
 # 行動の一連の処理でii_stateを更新する
-def guess_enemy_piece_player(model, ii_state, before_tcp_str, now_tcp_str):
+def guess_enemy_piece_player(model_path, ii_state, before_tcp_str, now_tcp_str):
     # 相手の盤面から全ての行動の推測値を計算しておく
     print("推測値を算出中")
-    beforehand_estimated_num = enemy_ii_predict(model, ii_state)
+    beforehand_estimated_num = enemy_ii_predict(model_path, ii_state)
 
     # 実際に取られた行動を取得
     print("相手の行動番号を取得中")
@@ -683,7 +789,7 @@ def guess_enemy_piece_player(model, ii_state, before_tcp_str, now_tcp_str):
 
     # 行動を決定
     print("行動を決定中")
-    action_num = action_decision(model, ii_state)
+    action_num = action_decision(model_path, ii_state)
     print("行動番号", action_num, sep=":")
 
     # 行動を受けて自分の推測値を更新
@@ -698,12 +804,17 @@ def guess_enemy_piece_player(model, ii_state, before_tcp_str, now_tcp_str):
 
 
 # デバッグ用(tcpを受けずに直接行動番号を受ける)(これを正式にして本家を分家にした方が良いのでは)
-def guess_enemy_piece_player_for_debug(model, ii_state, just_before_enemy_action_num):
+def guess_enemy_piece_player_for_debug(
+    model_path, ii_state, just_before_enemy_action_num
+):
     # 相手の盤面から全ての行動の推測値を計算しておく
     # print("推測値を算出中")
-    beforehand_estimated_num = enemy_ii_predict(model, ii_state)
+    beforehand_estimated_num = enemy_ii_predict(model_path, ii_state)
 
     # print("敵の行動番号", just_before_enemy_action_num, sep=":")
+    value_ranking_by_board(
+        beforehand_estimated_num, just_before_enemy_action_num, ii_state
+    )
 
     # ここら辺怪しすぎる
     # 実際に取られた行動から推測値を更新
@@ -721,11 +832,11 @@ def guess_enemy_piece_player_for_debug(model, ii_state, just_before_enemy_action
 
     # 行動を決定
     # print("行動を決定中")
-    action_num = action_decision(model, ii_state)
+    action_num = action_decision(model_path, ii_state)
     # print("行動番号", action_num, sep=":")
 
     # 行動を受けて自分の推測値を更新
-    # beforehand_my_estimated_num = my_ii_predict(model, ii_state)
+    # beforehand_my_estimated_num = my_ii_predict(model_path, ii_state)
     # (未実装)update_my_predict_num_all(ii_state, beforehand_my_estimated_num, action_num)
 
     # 自分の決定した行動でii_stateを更新
@@ -738,9 +849,9 @@ def guess_enemy_piece_player_for_debug(model, ii_state, just_before_enemy_action
 # 動作確認
 if __name__ == "__main__":
     start = time.time()
-    path = sorted(Path("./model").glob("*.h5"))[-1]
-    model = load_model(str(path))
-    ii_state = II_State({8, 9, 10, 11})
+    # path = sorted(Path("./model").glob("*.h5"))[-1]
+    # model = load_model(str(path))
+    # ii_state = II_State({8, 9, 10, 11})
 
     # reduce_pattern(4, True, ii_state)
 
@@ -758,33 +869,6 @@ if __name__ == "__main__":
         "14R24R34R44R15B25B35B45B43u31u21u11u40u30u20u10u",
         "14R24R34R44R15B25B35B45B44u31u21u11u40u30u20u10u",
     )
-
-    # デバッグ用
-    # a = enemy_coordinate_checker(
-    #     "14R24R34R44R15B25B35B45B41u31u21u11u40u30u20u10u",
-    #     "14R24R34R44R15B25B35B45B41u32u21u11u40u30u20u10u",
-    # )
-    # print(a)
-    # # 44を43がkill
-    # b = enemy_coordinate_checker(
-    #     "14R24R34R44R15B25B35B45B43u31u21u11u40u30u20u10u",
-    #     "14R24R34R99R15B25B35B45B44u31u21u11u40u30u20u10u",
-    # )
-    # print(b)
-    # BeforeAndNow = enemy_coordinate_checker(
-    #     "14R24R34R44R15B25B35B45B41u31u21u11u40u30u20u10u",
-    #     "14R24R34R44R15B25B35B45B41u32u21u11u40u30u20u10u",
-    # )
-    # print(update_II_state(ii_state, a[0], a[1]))
-    # teleport(ii_state, 10, 22)  # 10の敵駒を22に移動
-    # print(update_II_state(ii_state, b[0], b[1]))
-    # print(calculate_enemy_action_number_from_coordinate(a[0], a[1]))
-    # state = State()
-
-    # print(action_decision(model, ii_state))
-    # print(ii_state.enemy_estimated_num)
-    # reduce_pattern(1, True, ii_state)
-    # print(ii_state.enemy_estimated_num)
 
     elapsed_time = time.time() - start
     print("elapsed_time:{0}".format(elapsed_time) + "[sec]")

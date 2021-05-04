@@ -290,14 +290,6 @@ from tensorflow.keras.models import load_model
 from test import IIHandyAction
 
 
-# 価値の高い行動を愚直に選択し続ける
-def predict_action(model, state):
-    policies, value = predict(model, state)
-    legal_actions = state.legal_actions()
-    best_policie_action_index = np.argmax(policies)
-    return legal_actions[best_policie_action_index]
-
-
 # モンテカルロ木探索の行動選択
 def mcts_action(state):
     # モンテカルロ木探索のノード
@@ -431,6 +423,90 @@ def no_cheat_mcts_action(state):
     return mcts_action(return_random_shuffle_state(state))
 
 
+# どれほど正確に推論できているかどうかを計測する
+# 正常に動作しません
+def measure_estimate_accuracy(ii_state, state, csvWriter=None):
+    # if state.depth % 10 != 0:
+    #     return
+    estimate_value = ii_state.return_estimate_value()
+    real_blue_piece = list(
+        ii_state.real_enemy_piece_blue_set
+    )  # 0~4の青駒のインデックスを格納 ex)(1, 2, 3, 4)
+
+    # 死んでいる敵駒の数(種類が確定している敵駒の数)
+    dead_enemy_piece_num = (
+        8 - ii_state.living_piece_color[0] - ii_state.living_piece_color[1]
+    )
+    dead_enemy_blue_piece_num = 4 - ii_state.living_piece_color[0]
+
+    # estimate_valueの上位二つのインデックスを取得 array([n])でとってくるのでケツに[0][0]つける
+    top_four = [
+        np.where(estimate_value == np.sort(estimate_value)[-1]),
+        np.where(estimate_value == np.sort(estimate_value)[-2]),
+        np.where(estimate_value == np.sort(estimate_value)[-3]),
+        np.where(estimate_value == np.sort(estimate_value)[-4]),
+    ]
+    # real_blue_pieceといくつ一致しているかを確認(最大4)
+    number_of_matches = 0
+    if (
+        real_blue_piece[0] == top_four[0][0][0]
+        or real_blue_piece[0] == top_four[1][0][0]
+        or real_blue_piece[0] == top_four[2][0][0]
+        or real_blue_piece[0] == top_four[3][0][0]
+    ):
+        number_of_matches += 1
+    if (
+        real_blue_piece[1] == top_four[0][0][0]
+        or real_blue_piece[1] == top_four[1][0][0]
+        or real_blue_piece[1] == top_four[2][0][0]
+        or real_blue_piece[1] == top_four[3][0][0]
+    ):
+        number_of_matches += 1
+    if (
+        real_blue_piece[2] == top_four[0][0][0]
+        or real_blue_piece[2] == top_four[1][0][0]
+        or real_blue_piece[2] == top_four[2][0][0]
+        or real_blue_piece[2] == top_four[3][0][0]
+    ):
+        number_of_matches += 1
+    if (
+        real_blue_piece[3] == top_four[0][0][0]
+        or real_blue_piece[3] == top_four[1][0][0]
+        or real_blue_piece[3] == top_four[2][0][0]
+        or real_blue_piece[3] == top_four[3][0][0]
+    ):
+        number_of_matches += 1
+
+    # 一致度合いを計測
+    degree_of_match = float(0)
+    for index, est_val in enumerate(estimate_value):
+        if (
+            index == real_blue_piece[0]
+            or index == real_blue_piece[1]
+            or index == real_blue_piece[2]
+            or index == real_blue_piece[3]
+        ):
+            # 実際の駒の色が青だった場合
+            degree_of_match += est_val - 0.5
+        else:
+            # 実際の駒の色が赤だった場合
+            degree_of_match += 0.5 - est_val
+    # degree_of_match /= 2
+
+    if True:
+        print("敵の青駒のインデックス", real_blue_piece)
+        print("ターン数", "上位4駒の一致数", "一致度", "敵の死駒数", "敵の青の死駒数", "推測値", sep=",")
+        print(
+            state.depth,
+            number_of_matches,
+            degree_of_match,
+            dead_enemy_piece_num,
+            dead_enemy_blue_piece_num,
+            estimate_value,
+            sep=",",
+        )
+
+
 # logのやつの戦闘データ一気にとる
 drow_count = 0
 
@@ -478,9 +554,6 @@ def evaluate_GeisterLog():
                     # )
                     # just_before_action_num = guess_player_action
 
-                    # just_before_action_num = predict_action(
-                    #     model, state
-                    # )  # 愚直に方策が最大の行動を選択
                     just_before_action_num = predict_mcts(state)  # 学習データを使ったMCTS
                     if just_before_action_num == 2 or just_before_action_num == 22:
                         state.is_goal = True
@@ -501,69 +574,72 @@ def evaluate_GeisterLog():
 
 
 # 推測+完全情報の方策を用いた行動決定
-def ci_pridict_action(ii_state, just_before_action_num):
+def ci_pridict_action(ii_state, just_before_action_num, model_path):
     just_before_enemy_action_num = just_before_action_num
-    # model = None
-    # Noneはモデルファイル(要らなくなったのでNoneにしてる。可読性を下げるので後程修正。)
     guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
-        None, ii_state, just_before_enemy_action_num
+        model_path, ii_state, just_before_enemy_action_num
     )
     return guess_player_action
 
 
-def evaluate_HandyGeister():
-    path = "10000.pth"
+def evaluate_HandyGeister(path_list=["latest"]):
     global drow_count
-    drow_count = 0
-    win_player = [0, 0]
-    ii_handy_action = IIHandyAction("ii_models/" + path)
+    for path in path_list:
+        ii_model_path = "ii_models/" + path + ".pth"
+        ci_model_path = "models/" + path + ".pth"
 
-    print("start compete : path/" + path)
-    for _ in range(100):
-        # 直前の行動を保管
-        just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
+        drow_count = 0
+        win_player = [0, 0]
+        ii_handy_action = IIHandyAction(ii_model_path)
 
-        # 状態の生成
-        state = State()
-        ii_state = create_ii_state_from_state(state, True)
-        model = None
+        print("start compete : (path) " + path)
+        for _ in range(100):
+            # 直前の行動を保管
+            just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
 
-        # ゲーム終了までループ
-        while True:
-            if state.is_done():
-                break
+            # 状態の生成
+            state = State()
+            ii_state = create_ii_state_from_state(state, True)
 
-            # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
-            if state.depth % 2 == 0:
-                # just_before_action_num = random_action(state)  # ランダム
-                # just_before_action_num = no_cheat_and_fix_mcts_action(
-                #     state
-                # )  # 固定なしモンテカルロ木探索
-                just_before_action_num = ii_handy_action(state)  # 不完全情報でそのまま学習したエージェント
-                if just_before_action_num == 2 or just_before_action_num == 22:
-                    print("先手ゴール")
-                    state.is_goal = True
-                    state.goal_player = 0
+            # ゲーム終了までループ
+            while True:
+                if state.is_done():
                     break
-                state = state.next(just_before_action_num)
-            else:
-                # 推測+完全情報の方策を用いた行動決定
-                just_before_action_num = ci_pridict_action(
-                    ii_state, just_before_action_num
-                )
 
-                # just_before_action_num = random_action(state)
-                if just_before_action_num == 2 or just_before_action_num == 22:
-                    print("後手ゴール", just_before_action_num)
-                    state.is_goal = True
-                    state.goal_player = 1
-                    break
-                state = state.next(just_before_action_num)
+                # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
+                if state.depth % 2 == 0:
+                    # just_before_action_num = random_action(state)  # ランダム
+                    # just_before_action_num = no_cheat_mcts_action(state) #透視なしのMCTS
+                    just_before_action_num = ii_handy_action(
+                        state
+                    )  # 不完全情報でそのまま学習したエージェント
 
-        # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
-        state.winner_checker(win_player)
-        print(win_player)
-    print(drow_count)
+                    if just_before_action_num == 2 or just_before_action_num == 22:
+                        # print("先手ゴール")
+                        state.is_goal = True
+                        state.goal_player = 0
+                        break
+                    state = state.next(just_before_action_num)
+                else:
+                    # 推測+完全情報の方策を用いた行動決定
+                    just_before_action_num = ci_pridict_action(
+                        ii_state, just_before_action_num, ci_model_path
+                    )
+                    # just_before_action_num = random_action(state)  # ランダム
+                    # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+
+                    if just_before_action_num == 2 or just_before_action_num == 22:
+                        # print("後手ゴール", just_before_action_num)
+                        state.is_goal = True
+                        state.goal_player = 1
+                        break
+                    # measure_estimate_accuracy(ii_state, state)
+                    state = state.next(just_before_action_num)
+
+            # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
+            state.winner_checker(win_player)
+            print(win_player)
+        print(drow_count)
 
 
 def main():
@@ -572,11 +648,7 @@ def main():
 
     ii_state = create_ii_state_from_state(state, True)
 
-    # modelの読み込みに必要な処理
-    # path = sorted(Path("./model").glob("*.h5"))[-1]
-    # path = "models/best.h5"
-    # model = load_model(str(path))
-    model = None
+    model_path = "10000.pth"
 
     # 直前の行動を保管
     just_before_action_num = 0
@@ -603,7 +675,7 @@ def main():
         if state.depth % 2 == 1:
             just_before_enemy_action_num = just_before_action_num
             guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
-                model, ii_state, just_before_enemy_action_num
+                model_path, ii_state, just_before_enemy_action_num
             )
             just_before_action_num = guess_player_action
             # print("自作AIの行動番号", just_before_action_num)
@@ -634,4 +706,6 @@ def main():
 if __name__ == "__main__":
     # main()
     # evaluate_GeisterLog()
-    evaluate_HandyGeister()
+    # path_list = ["1", "3000", "5000", "10000"]
+    path_list = ["15000"]
+    evaluate_HandyGeister(path_list)
