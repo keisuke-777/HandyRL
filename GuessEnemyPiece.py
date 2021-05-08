@@ -491,31 +491,54 @@ def my_looking_create_state(ii_state, my_blue, my_red, enemy_blue, enemy_red):
     return [pieces_array_of(my_blue, my_red), pieces_array_of(enemy_blue, enemy_red)]
 
 
-# 入力の順序はcreate
-# enemyの視点から状態を作成
-def enemy_looking_create_state(ii_state, my_blue, my_red, enemy_blue, enemy_red):
-    # プレイヤー毎のデュアルネットワークの入力の2次元配列の取得
-    def pieces_array_of(blue_piece_list, red_piece_list):
-        table_list = []
-        blue_table = [0] * 36
-        # blue_piece_listは駒のIDの値なので、ii_state.all_pieceでそのIDを参照してあげると座標が取れる
-        for blue_piece in blue_piece_list:
-            if ii_state.all_piece[blue_piece] < 36:  # 死駒を除外
-                blue_table[ii_state.all_piece[blue_piece]] = 1
-        blue_table.reverse()  # 逆視点にするために要素を反転
-        table_list.append(blue_table)
+# # 入力の順序はcreate
+# # enemyの視点から状態を作成
+# def enemy_looking_create_state(ii_state, my_blue, my_red, enemy_blue, enemy_red):
+#     # プレイヤー毎のデュアルネットワークの入力の2次元配列の取得
+#     def pieces_array_of(blue_piece_list, red_piece_list):
+#         table_list = []
+#         blue_table = [0] * 36
+#         # blue_piece_listは駒のIDの値なので、ii_state.all_pieceでそのIDを参照してあげると座標が取れる
+#         for blue_piece in blue_piece_list:
+#             if ii_state.all_piece[blue_piece] < 36:  # 死駒を除外
+#                 blue_table[ii_state.all_piece[blue_piece]] = 1
+#         blue_table.reverse()  # 逆視点にするために要素を反転
+#         table_list.append(blue_table)
 
-        red_table = [0] * 36
-        for red_piece in red_piece_list:
-            if ii_state.all_piece[red_piece] < 36:
-                red_table[ii_state.all_piece[red_piece]] = 1
-        red_table.reverse()  # 逆視点にするために要素を反転
-        table_list.append(red_table)
+#         red_table = [0] * 36
+#         for red_piece in red_piece_list:
+#             if ii_state.all_piece[red_piece] < 36:
+#                 red_table[ii_state.all_piece[red_piece]] = 1
+#         red_table.reverse()  # 逆視点にするために要素を反転
+#         table_list.append(red_table)
 
-        return table_list
+#         return table_list
 
-    # デュアルネットワークの入力の2次元配列の取得(自分と敵両方)
-    return [pieces_array_of(enemy_blue, enemy_red), pieces_array_of(my_blue, my_red)]
+#     # デュアルネットワークの入力の2次元配列の取得(自分と敵両方)
+#     return [pieces_array_of(enemy_blue, enemy_red), pieces_array_of(my_blue, my_red)]
+
+
+# 諸々の情報からstateを作る
+def create_state_from_enemy_looking(ii_state, my_blue, my_red, enemy_blue, enemy_red):
+    # 自分の駒を格納
+    my_table = [0] * 36
+    for my_b in my_blue:
+        my_table[ii_state.all_piece[my_b]] = 1
+    for my_r in my_red:
+        my_table[ii_state.all_piece[my_r]] = 2
+
+    # 敵の駒を格納
+    enemy_table = [0] * 36
+    for en_b in enemy_blue:
+        enemy_table[ii_state.all_piece[en_b]] = 1
+    for en_r in enemy_red:
+        enemy_table[ii_state.all_piece[en_r]] = 2
+    enemy_table.reverse()  # このままでは敵の駒の座標が逆なので反転させて戻す
+
+    # 敵視点でのstateを生成
+    state = State(enemy_table, my_table)
+
+    return state
 
 
 # enemy→各駒の推測値を保存。推測のために70パターン想定するが、足し合わせるだけ(各盤面について保存はしない)
@@ -575,7 +598,7 @@ def my_ii_predict(model_path, ii_state):
 #     my_piece_set = set(ii_state.my_piece_list)
 #     enemy_piece_set = set(ii_state.enemy_piece_list)
 #     policies_list = []
-#     enemy_legal_actions = list(ii_state.enemy_legal_actions())
+#     enemy_legal_actions = sorted(list(ii_state.enemy_legal_actions()), key=lambda x: x)
 #     convert_func = convert_func_use_in_guess(model_path)
 #     for num_and_enemy_blue in ii_state.enemy_estimated_num:  # enemyのパターンの確からしさを求めたい
 #         # 赤駒のインデックスをセット形式で獲得(my_blueはタプル)
@@ -600,14 +623,23 @@ def my_ii_predict(model_path, ii_state):
 #         policies_list.extend([sum_np_policies])
 #     return policies_list
 
-# 自分の駒配置を確定で試してみる（うまくいけばこちらを採用）
+
+from test import get_policies
+
+# 自分の駒配置を確定させて推測するパターン
 # 相手の行動前に、相手の目線で各パターンにおける各行動の価値を算出
 def enemy_ii_predict(model_path, ii_state):
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
     policies_list = []
-    enemy_legal_actions = list(ii_state.enemy_legal_actions())
-    convert_func = convert_func_use_in_guess(model_path)
+    enemy_legal_actions = sorted(list(ii_state.enemy_legal_actions()), key=lambda x: x)
+
+    # enemy_legal_actions = sorted(enemy_legal_actions, key=lambda x: x)
+    # print("ii_legal", enemy_legal_actions)
+    # convert_func = convert_func_use_in_guess(model_path)
+    # print("盤面", ii_state)
+
+    get_policies_func = get_policies(model_path)
 
     # enemyのパターンの確からしさ(蓋然性)を求める
     for num_and_enemy_blue in ii_state.enemy_estimated_num:
@@ -617,12 +649,21 @@ def enemy_ii_predict(model_path, ii_state):
         # 自分の駒配置は見抜かれているものとして相手の行動の価値を求める
         my_blue_set = ii_state.real_my_piece_blue_set
         my_red_set = my_piece_set - my_blue_set
-        ii_pieces_array = enemy_looking_create_state(
+
+        # 相手視点のstateを作成した上で方策を獲得
+        enemy_looking_state = create_state_from_enemy_looking(
             ii_state, my_blue_set, my_red_set, num_and_enemy_blue[1], enemy_red_set,
         )
+        ap_list = sorted(get_policies_func(enemy_looking_state), key=lambda x: x[0])
+        policies = []
+        for tup in ap_list:
+            policies.append(tup[1])
 
         # HandyRLに適応
-        policies = convert_func(ii_pieces_array, enemy_legal_actions)
+        # ii_pieces_array = enemy_looking_create_state(
+        #     ii_state, my_blue_set, my_red_set, num_and_enemy_blue[1], enemy_red_set,
+        # )
+        # policies = convert_func(ii_pieces_array, enemy_legal_actions)
 
         # ndarrayに変換(自分の駒配置が確定でなかった際に、行列演算するためにnpに変換していた名残)
         np_policies = np.array(policies, dtype="f4")
@@ -636,7 +677,7 @@ def update_predict_num_all(
     ii_state, beforehand_estimated_num, enemy_action_num, gamma=default_gamma
 ):
     # print(enemy_action_num)
-    enemy_legal_actions = list(ii_state.enemy_legal_actions())
+    enemy_legal_actions = sorted(list(ii_state.enemy_legal_actions()), key=lambda x: x)
     enemy_action_index = enemy_legal_actions.index(enemy_action_num)
 
     for index, enemy_estimated_num in enumerate(ii_state.enemy_estimated_num):
@@ -644,6 +685,43 @@ def update_predict_num_all(
         enemy_estimated_num[0] = (
             enemy_estimated_num[0] * gamma
         ) + beforehand_estimated_num[index][enemy_action_index]
+
+
+# 相手の行動から推測値を更新
+# 相手の取りうる指し手の中で最も価値の高い行動であれば、その盤面である可能性が高いと考える
+# 最も価値の高い行動であれば+1、そうでなければ+0
+def update_predict_num_max_only(
+    ii_state, beforehand_estimated_num, enemy_action_num, gamma=default_gamma
+):
+    enemy_legal_actions = sorted(list(ii_state.enemy_legal_actions()), key=lambda x: x)
+    enemy_action_index = enemy_legal_actions.index(enemy_action_num)
+
+    for index, enemy_estimated_num in enumerate(ii_state.enemy_estimated_num):
+        action_value = beforehand_estimated_num[index][enemy_action_index]
+
+        # if np.argmax(beforehand_estimated_num[index]) == enemy_action_index:
+        #     # 推測値を更新(1を足す)
+        #     enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 1
+        # 相手の選択した行動が、相手の取りうる行動の中で最高の評価であった場合
+
+        if (
+            np.partition(beforehand_estimated_num[index].ravel(), -1)[-1]
+            == action_value
+        ):
+            enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 1
+
+        # 相手の選択した行動が、相手の取りうる行動の中で2番目の評価であった場合
+        # if (
+        #     np.partition(beforehand_estimated_num[index].ravel(), -2)[-2]
+        #     == action_value
+        # ):
+        #     enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 0.7
+        # # 相手の選択した行動が、相手の取りうる行動の中で3番目の評価であった場合
+        # if (
+        #     np.partition(beforehand_estimated_num[index].ravel(), -3)[-3]
+        #     == action_value
+        # ):
+        #     enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 0.5
 
 
 # 駒の死亡処理
@@ -695,7 +773,7 @@ def reduce_pattern(dead_piece_ID, color_is_blue: bool, ii_state):
 
 # 相手の推測値を使って無難な手を選択(元祖)
 # 価値が最大の行動番号を返す
-def action_decision(model_path, ii_state):
+def action_decision_legacy(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -786,6 +864,54 @@ def hoge_action_decision(model_path, ii_state):
     return best_action
 
 
+# 1位の世界しか考えない
+def action_decision(model_path, ii_state):
+    a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
+    my_piece_set = set(ii_state.my_piece_list)
+    enemy_piece_set = set(ii_state.enemy_piece_list)
+
+    # 自分の駒配置を取得(確定)
+    real_my_piece_blue_set = ii_state.real_my_piece_blue_set
+    real_my_piece_red_set = ii_state.real_my_piece_red_set
+    legal_actions = list(ii_state.legal_actions())
+    actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
+    convert_func = convert_func_use_in_guess(model_path)
+
+    # 価値が上位の世界を抽出
+    en_est_num = ii_state.enemy_estimated_num.copy()
+    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+    # 価値が1位の世界を抽出
+    sorted_en_est_num = sorted_en_est_num[0:1]
+
+    # 相手の70パターンについてforループ(自分のパターンは確定で計算)
+    for num_and_enemy_blue in sorted_en_est_num:
+        enemy_blue_set = set(num_and_enemy_blue[1])
+        enemy_red_set = enemy_piece_set - enemy_blue_set
+
+        # 盤面を6*6*4次元の情報に変換
+        ii_pieces_array = my_looking_create_state(
+            ii_state,
+            real_my_piece_blue_set,
+            real_my_piece_red_set,
+            enemy_blue_set,
+            enemy_red_set,
+        )
+
+        policies = convert_func(ii_pieces_array, legal_actions)
+
+        # 行列演算するためにndarrayに変換
+        np_policies = np.array(policies, dtype="f4")
+
+        # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
+        actions_value_sum_list = actions_value_sum_list + (
+            np_policies * num_and_enemy_blue[0]
+        )
+
+    best_action_index = np.argmax(actions_value_sum_list)  # 最大値のインデックスを取得
+    best_action = legal_actions[best_action_index]  # 価値が最大の行動を取得
+    return best_action
+
+
 # 駒をテレポート(デバッグ用で破壊的)(敵駒の存在を想定していない)
 def teleport(ii_state, before, now):
     name = np.where(ii_state.all_piece == before)[0][0]
@@ -796,7 +922,7 @@ def teleport(ii_state, before, now):
 # 実際の盤面は何位なのか、トップの盤面の形などを出力すると良い？
 def value_ranking_by_board(beforehand_estimated_num, action_num, ii_state):
     # 行動番号からインデックスを取得
-    enemy_legal_actions = list(ii_state.enemy_legal_actions())
+    enemy_legal_actions = sorted(list(ii_state.enemy_legal_actions()), key=lambda x: x)
     enemy_action_index = enemy_legal_actions.index(action_num)
     en_est_num = ii_state.enemy_estimated_num.copy()
 
@@ -876,19 +1002,23 @@ def guess_enemy_piece_player_for_debug(
     # value_ranking_by_board(
     #     beforehand_estimated_num, just_before_enemy_action_num, ii_state
     # )
-
     # print("盤面：", ii_state)
-    # print("実際の青駒：", ii_state.real_enemy_piece_blue_set)
-    # en_est_num = ii_state.enemy_estimated_num.copy()
-    # sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
-    # print("推測値：", sorted_en_est_num)
+
+    print("実際の青駒：", ii_state.real_enemy_piece_blue_set)
+    en_est_num = ii_state.enemy_estimated_num.copy()
+    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+    print("推測値：", sorted_en_est_num)
+
     # value_ranking_by_board(
     #     beforehand_estimated_num, just_before_enemy_action_num, ii_state
     # )
 
-    # ここら辺怪しすぎる
     # 実際に取られた行動から推測値を更新
-    update_predict_num_all(
+    # update_predict_num_all(
+    #     ii_state, beforehand_estimated_num, just_before_enemy_action_num, gamma
+    # )
+    # print("beforehand", beforehand_estimated_num)
+    update_predict_num_max_only(
         ii_state, beforehand_estimated_num, just_before_enemy_action_num, gamma
     )
 

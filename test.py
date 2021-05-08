@@ -237,9 +237,9 @@ def convert_func_use_in_guess(path):
             policies.append(tup[1])
 
         # 方策が負の値を取ると色々困るので補正
-        min_p = min(policies)
-        policies -= min_p
-        policies /= sum(policies) if sum(policies) else 1
+        # min_p = min(policies)
+        # policies -= min_p
+        # policies /= sum(policies) if sum(policies) else 1
         return policies
 
     return convert_func_use_in_guess
@@ -310,6 +310,7 @@ def obs_to_policy_to_use_game(agent, obs, state):
     outputs = agent.plan(obs)
 
     game_actions = state.legal_actions()
+    print("state_legal", game_actions)
     handy_actions = convert_gameAction_to_handyAction(game_actions)
 
     p = outputs["policy"]
@@ -379,6 +380,19 @@ def test_predict():
     # print(len(policy))
 
 
+def get_policies(path):
+    env = Environment()
+    env.reset()
+    agent = make_agent(env, path)
+
+    def get_policies(state):
+        obs = convert_state_to_obs(state)
+        ap_list = obs_to_policy_to_use_game(agent, obs, state)
+        return ap_list
+
+    return get_policies
+
+
 # 最も利得の高い行動を選択
 # "models/10000.pth"
 def HandyAction(path):
@@ -389,6 +403,7 @@ def HandyAction(path):
     def HandyAction(state):
         obs = convert_state_to_obs(state)
         ap_list = obs_to_policy_to_use_game(agent, obs, state)
+        print("ソートした行動リスト", ap_list)
         return ap_list[0][0]
 
     return HandyAction

@@ -517,6 +517,8 @@ def ci_pridict_action(ii_state, just_before_action_num, model_path, gamma):
 
 
 def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
+    from test import HandyAction
+
     global drow_count
     for path in path_list:
         ii_model_path = "ii_models/" + path + ".pth"
@@ -526,7 +528,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
         win_player = [0, 0]
         ii_handy_action = IIHandyAction(ii_model_path)
 
-        print("start compete : (path) " + path)
+        # print("start compete : (path) " + path)
         for _ in range(10):
             # 直前の行動を保管
             just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
@@ -534,6 +536,8 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
             # 状態の生成
             state = State()
             ii_state = create_ii_state_from_state(state, True)
+
+            handy_action = HandyAction(ci_model_path)  # 完全情報ガイスター
 
             # ゲーム終了までループ
             while True:
@@ -544,9 +548,10 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                 if state.depth % 2 == 0:
                     # just_before_action_num = random_action(state)  # ランダム
                     # just_before_action_num = no_cheat_mcts_action(state) #透視なしのMCTS
-                    just_before_action_num = ii_handy_action(
-                        state
-                    )  # 不完全情報でそのまま学習したエージェント
+                    # just_before_action_num = ii_handy_action(
+                    #     state
+                    # )  # 不完全情報でそのまま学習したエージェント
+                    just_before_action_num = handy_action(state)
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
                         # print("先手ゴール")
@@ -569,10 +574,10 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                         break
                     # measure_estimate_accuracy(ii_state, state)
                     state = state.next(just_before_action_num)
-
+            print(win_player)
             # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
             state.winner_checker(win_player)
-        print(win_player)
+        print("結果:", win_player)
 
 
 def main():
@@ -641,24 +646,24 @@ if __name__ == "__main__":
     # evaluate_GeisterLog()
     # path_list = ["1", "3000", "5000", "10000"]
     path_list = ["20000"]
-    print("0.1だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.1)
-    print("0.2だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.2)
-    print("0.3だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.3)
-    print("0.4だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.4)
-    print("0.5だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.5)
-    print("0.6だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.6)
-    print("0.7だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.7)
-    print("0.8だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.8)
-    print("0.9だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.9)
+    # print("0.1だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.1)
+    # print("0.2だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.2)
+    # print("0.3だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.3)
+    # print("0.4だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.4)
+    # print("0.5だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.5)
+    # print("0.6だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.6)
+    # print("0.7だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.7)
+    # print("0.8だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.8)
+    # print("0.9だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.9)
     print("1.0だぞおおおおおおおおおおおお")
     evaluate_HandyGeister(path_list, 1.0)
 
