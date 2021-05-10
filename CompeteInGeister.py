@@ -548,10 +548,10 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                 if state.depth % 2 == 0:
                     # just_before_action_num = random_action(state)  # ランダム
                     # just_before_action_num = no_cheat_mcts_action(state) #透視なしのMCTS
-                    # just_before_action_num = ii_handy_action(
-                    #     state
-                    # )  # 不完全情報でそのまま学習したエージェント
-                    just_before_action_num = handy_action(state)
+                    just_before_action_num = ii_handy_action(
+                        state
+                    )  # 不完全情報でそのまま学習したエージェント
+                    # just_before_action_num = handy_action(state)
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
                         # print("先手ゴール")
@@ -658,12 +658,12 @@ if __name__ == "__main__":
     # evaluate_HandyGeister(path_list, 0.5)
     # print("0.6だぞおおおおおおおおおおおお")
     # evaluate_HandyGeister(path_list, 0.6)
-    # print("0.7だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.7)
-    # print("0.8だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.8)
-    # print("0.9だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.9)
+    print("0.7だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.7)
+    print("0.8だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.8)
+    print("0.9だぞおおおおおおおおおおおお")
+    evaluate_HandyGeister(path_list, 0.9)
     print("1.0だぞおおおおおおおおおおおお")
     evaluate_HandyGeister(path_list, 1.0)
 

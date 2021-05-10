@@ -523,16 +523,20 @@ def create_state_from_enemy_looking(ii_state, my_blue, my_red, enemy_blue, enemy
     # 自分の駒を格納
     my_table = [0] * 36
     for my_b in my_blue:
-        my_table[ii_state.all_piece[my_b]] = 1
+        if ii_state.all_piece[my_b] < 36:
+            my_table[ii_state.all_piece[my_b]] = 1
     for my_r in my_red:
-        my_table[ii_state.all_piece[my_r]] = 2
+        if ii_state.all_piece[my_r] < 36:
+            my_table[ii_state.all_piece[my_r]] = 2
 
     # 敵の駒を格納
     enemy_table = [0] * 36
     for en_b in enemy_blue:
-        enemy_table[ii_state.all_piece[en_b]] = 1
+        if ii_state.all_piece[en_b] < 36:
+            enemy_table[ii_state.all_piece[en_b]] = 1
     for en_r in enemy_red:
-        enemy_table[ii_state.all_piece[en_r]] = 2
+        if ii_state.all_piece[en_r] < 36:
+            enemy_table[ii_state.all_piece[en_r]] = 2
     enemy_table.reverse()  # このままでは敵の駒の座標が逆なので反転させて戻す
 
     # 敵視点でのstateを生成
@@ -695,33 +699,54 @@ def update_predict_num_max_only(
 ):
     enemy_legal_actions = sorted(list(ii_state.enemy_legal_actions()), key=lambda x: x)
     enemy_action_index = enemy_legal_actions.index(enemy_action_num)
+    bf_estimated_num = beforehand_estimated_num
 
-    for index, enemy_estimated_num in enumerate(ii_state.enemy_estimated_num):
-        action_value = beforehand_estimated_num[index][enemy_action_index]
+    # 未知の駒が0か5に存在している場合、未知の駒が赤駒である場合でも行動番号2や22を追加しないと配列への参照(beforehand_estimated_num[index][enemy_action_index])がズレる
+    goal_actions = []
+    if 2 in enemy_legal_actions:
+        goal_actions.append(2)
+    if 22 in enemy_legal_actions:
+        goal_actions.append(22)
+    # ゴール行動が含まれていた場合
+    if goal_actions != []:
+        legal_length = len(enemy_legal_actions)
+        for goal in goal_actions:
+            new_est_num = []
+            for bf_index, bf_est_num in enumerate(bf_estimated_num):
+                # このやり方だと0,5の両方に赤駒がいた場合に対処できないが、ごく稀にしか起こらないためその場合の推測は割り切る
+                if legal_length > len(bf_est_num):
+                    insert_index = enemy_legal_actions.index(goal)
+                    new_est_num.append(
+                        np.insert(bf_estimated_num[bf_index], insert_index, -999.9)
+                    )
+                else:
+                    new_est_num.append(bf_estimated_num[bf_index])
+            bf_estimated_num = new_est_num
 
-        # if np.argmax(beforehand_estimated_num[index]) == enemy_action_index:
+    enemy_estimated_num = ii_state.enemy_estimated_num
+    for index, en_est_num in enumerate(enemy_estimated_num):
+        action_value = bf_estimated_num[index][enemy_action_index]
+
+        # if np.argmax(bf_estimated_num[index]) == enemy_action_index:
         #     # 推測値を更新(1を足す)
-        #     enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 1
-        # 相手の選択した行動が、相手の取りうる行動の中で最高の評価であった場合
+        #     en_est_num[0] = (en_est_num[0] * gamma) + 1
 
-        if (
-            np.partition(beforehand_estimated_num[index].ravel(), -1)[-1]
-            == action_value
-        ):
-            enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 1
+        # 相手の選択した行動が、相手の取りうる行動の中で最高の評価であった場合
+        if np.partition(bf_estimated_num[index].ravel(), -1)[-1] == action_value:
+            en_est_num[0] = (en_est_num[0] * gamma) + 1
 
         # 相手の選択した行動が、相手の取りうる行動の中で2番目の評価であった場合
         # if (
-        #     np.partition(beforehand_estimated_num[index].ravel(), -2)[-2]
+        #     np.partition(bf_estimated_num[index].ravel(), -2)[-2]
         #     == action_value
         # ):
-        #     enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 0.7
+        #     en_est_num[0] = (en_est_num[0] * gamma) + 0.7
         # # 相手の選択した行動が、相手の取りうる行動の中で3番目の評価であった場合
         # if (
-        #     np.partition(beforehand_estimated_num[index].ravel(), -3)[-3]
+        #     np.partition(bf_estimated_num[index].ravel(), -3)[-3]
         #     == action_value
         # ):
-        #     enemy_estimated_num[0] = (enemy_estimated_num[0] * gamma) + 0.5
+        #     en_est_num[0] = (en_est_num[0] * gamma) + 0.5
 
 
 # 駒の死亡処理
@@ -1004,10 +1029,13 @@ def guess_enemy_piece_player_for_debug(
     # )
     # print("盤面：", ii_state)
 
-    print("実際の青駒：", ii_state.real_enemy_piece_blue_set)
-    en_est_num = ii_state.enemy_estimated_num.copy()
-    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
-    print("推測値：", sorted_en_est_num)
+    # print("〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜")
+    # print("実際の青駒：", ii_state.real_enemy_piece_blue_set)
+    # en_est_num = ii_state.enemy_estimated_num.copy()
+    # print("未ソート推測値：", en_est_num)
+    # sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+    # print("推測値：", sorted_en_est_num)
+    # print("beforehand_estimated_num:", beforehand_estimated_num)
 
     # value_ranking_by_board(
     #     beforehand_estimated_num, just_before_enemy_action_num, ii_state

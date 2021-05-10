@@ -305,12 +305,12 @@ def convert_handyAction_to_gameAction(handy_action):
 
 
 # modelを持っているagentと自作のobsからaction(game.pyに適応)とpolicyのセットを抽出
+# 問い合わせるたびに異なるポリシー返してる
 def obs_to_policy_to_use_game(agent, obs, state):
     # 方策を取得
     outputs = agent.plan(obs)
 
     game_actions = state.legal_actions()
-    print("state_legal", game_actions)
     handy_actions = convert_gameAction_to_handyAction(game_actions)
 
     p = outputs["policy"]
@@ -403,7 +403,6 @@ def HandyAction(path):
     def HandyAction(state):
         obs = convert_state_to_obs(state)
         ap_list = obs_to_policy_to_use_game(agent, obs, state)
-        print("ソートした行動リスト", ap_list)
         return ap_list[0][0]
 
     return HandyAction
