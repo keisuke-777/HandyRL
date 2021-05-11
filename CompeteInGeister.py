@@ -591,7 +591,7 @@ if __name__ == "__main__":
     # path_list = ["20000"]
     path_list = []
     for num in range(1, 44):
-        path_list.append(str(num * 1000))
+        path_list.append(str(num * 4000))
     # print("0.1だぞおおおおおおおおおおおお")
     # evaluate_HandyGeister(path_list, 0.1)
     # print("0.2だぞおおおおおおおおおおおお")
