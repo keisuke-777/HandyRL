@@ -732,6 +732,51 @@ def update_predict_num_max_only(
             en_est_num[0] = (en_est_num[0] * gamma) + 1
 
 
+# 相手の行動から推測値を更新
+# 方策の値を盤面ごとに正規化する
+def update_predict_num_normalize(
+    ii_state, beforehand_estimated_num, enemy_action_num, gamma=default_gamma
+):
+    enemy_legal_actions = sorted(list(ii_state.enemy_legal_actions()), key=lambda x: x)
+    enemy_action_index = enemy_legal_actions.index(enemy_action_num)
+    bf_estimated_num = beforehand_estimated_num
+
+    # 未知の駒が0か5に存在している場合、未知の駒が赤駒である場合でも行動番号2や22を追加しないと配列への参照(beforehand_estimated_num[index][enemy_action_index])がズレる
+    goal_actions = []
+    if 2 in enemy_legal_actions:
+        goal_actions.append(2)
+    if 22 in enemy_legal_actions:
+        goal_actions.append(22)
+    # ゴール行動が含まれていた場合
+    if goal_actions != []:
+        legal_length = len(enemy_legal_actions)
+        for goal in goal_actions:
+            new_est_num = []
+            for bf_index, bf_est_num in enumerate(bf_estimated_num):
+                # このやり方だと0,5の両方に赤駒がいた場合に対処できないが、ごく稀にしか起こらないためその場合の推測は割り切る
+                if legal_length > len(bf_est_num):
+                    # 最小値を探索
+                    pol_min = np.amin(bf_est_num)
+                    # 非合法手の方策の値は最小値と同じにする
+                    insert_index = enemy_legal_actions.index(goal)
+                    new_est_num.append(np.insert(bf_est_num, insert_index, pol_min))
+                else:
+                    new_est_num.append(bf_estimated_num[bf_index])
+            bf_estimated_num = new_est_num
+
+    # 最小値を0にする
+    for bf_est_num in bf_estimated_num:
+        bf_est_num -= np.amin(bf_est_num)
+    # 最小値0、合計1に正規化する
+    for bf_est_num in bf_estimated_num:
+        bf_est_num /= np.sum(bf_est_num)
+
+    for index, en_est_num in enumerate(ii_state.enemy_estimated_num):
+        action_value = bf_estimated_num[index][enemy_action_index]
+        # 実際に取られた行動の評価値を足すことで、推測値を更新
+        en_est_num[0] = (en_est_num[0] * gamma) + action_value
+
+
 # 駒の死亡処理
 # 既存のパターンから推測値を抜き出して新しい推測値を作成
 def reduce_pattern(dead_piece_ID, color_is_blue: bool, ii_state):
@@ -1094,7 +1139,10 @@ def guess_enemy_piece_player_for_debug(
     #     ii_state, beforehand_estimated_num, just_before_enemy_action_num, gamma
     # )
     # print("beforehand", beforehand_estimated_num)
-    update_predict_num_max_only(
+    # update_predict_num_max_only(
+    #     ii_state, beforehand_estimated_num, just_before_enemy_action_num, gamma
+    # )
+    update_predict_num_normalize(
         ii_state, beforehand_estimated_num, just_before_enemy_action_num, gamma
     )
 
