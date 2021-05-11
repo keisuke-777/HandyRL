@@ -78,7 +78,8 @@ def convert_state_to_obs(state):
     scalar[6 - blue_c_cnt] = 1
     scalar[10 - red_c_cnt] = 1
     scalar[14 - blue_o_cnt] = 1
-    scalar[18 - red_o_cnt] = 1
+    if red_o_cnt > 0:
+        scalar[18 - red_o_cnt] = 1
 
     obs["scalar"] = scalar
     return obs
