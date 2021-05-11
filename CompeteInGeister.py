@@ -529,7 +529,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
         ii_handy_action = IIHandyAction(ii_model_path)
 
         # print("start compete : (path) " + path)
-        for _ in range(10):
+        for _ in range(100):
             # 直前の行動を保管
             just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
 
@@ -658,12 +658,12 @@ if __name__ == "__main__":
     # evaluate_HandyGeister(path_list, 0.5)
     # print("0.6だぞおおおおおおおおおおおお")
     # evaluate_HandyGeister(path_list, 0.6)
-    print("0.7だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.7)
-    print("0.8だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.8)
+    # print("0.7だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.7)
+    # print("0.8だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 0.8)
     print("0.9だぞおおおおおおおおおおおお")
     evaluate_HandyGeister(path_list, 0.9)
-    print("1.0だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 1.0)
+    # print("1.0だぞおおおおおおおおおおおお")
+    # evaluate_HandyGeister(path_list, 1.0)
 

@@ -727,26 +727,9 @@ def update_predict_num_max_only(
     for index, en_est_num in enumerate(enemy_estimated_num):
         action_value = bf_estimated_num[index][enemy_action_index]
 
-        # if np.argmax(bf_estimated_num[index]) == enemy_action_index:
-        #     # 推測値を更新(1を足す)
-        #     en_est_num[0] = (en_est_num[0] * gamma) + 1
-
         # 相手の選択した行動が、相手の取りうる行動の中で最高の評価であった場合
         if np.partition(bf_estimated_num[index].ravel(), -1)[-1] == action_value:
             en_est_num[0] = (en_est_num[0] * gamma) + 1
-
-        # 相手の選択した行動が、相手の取りうる行動の中で2番目の評価であった場合
-        # if (
-        #     np.partition(bf_estimated_num[index].ravel(), -2)[-2]
-        #     == action_value
-        # ):
-        #     en_est_num[0] = (en_est_num[0] * gamma) + 0.7
-        # # 相手の選択した行動が、相手の取りうる行動の中で3番目の評価であった場合
-        # if (
-        #     np.partition(bf_estimated_num[index].ravel(), -3)[-3]
-        #     == action_value
-        # ):
-        #     en_est_num[0] = (en_est_num[0] * gamma) + 0.5
 
 
 # 駒の死亡処理
@@ -843,7 +826,7 @@ def action_decision_legacy(model_path, ii_state):
 
 
 # 上位半分のみの世界しか考えない
-def hoge_action_decision(model_path, ii_state):
+def half_action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -889,8 +872,8 @@ def hoge_action_decision(model_path, ii_state):
     return best_action
 
 
-# 1位の世界しか考えない
-def action_decision(model_path, ii_state):
+# 1位の世界しか考えないno1_
+def no1_action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -906,10 +889,70 @@ def action_decision(model_path, ii_state):
     en_est_num = ii_state.enemy_estimated_num.copy()
     sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
     # 価値が1位の世界を抽出
-    sorted_en_est_num = sorted_en_est_num[0:1]
+    sorted_en_est_num = sorted_en_est_num[0:2]
 
     # 相手の70パターンについてforループ(自分のパターンは確定で計算)
     for num_and_enemy_blue in sorted_en_est_num:
+        enemy_blue_set = set(num_and_enemy_blue[1])
+        enemy_red_set = enemy_piece_set - enemy_blue_set
+
+        # 盤面を6*6*4次元の情報に変換
+        ii_pieces_array = my_looking_create_state(
+            ii_state,
+            real_my_piece_blue_set,
+            real_my_piece_red_set,
+            enemy_blue_set,
+            enemy_red_set,
+        )
+
+        policies = convert_func(ii_pieces_array, legal_actions)
+
+        # 行列演算するためにndarrayに変換
+        np_policies = np.array(policies, dtype="f4")
+
+        # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
+        actions_value_sum_list = actions_value_sum_list + (
+            np_policies * num_and_enemy_blue[0]
+        )
+
+    best_action_index = np.argmax(actions_value_sum_list)  # 最大値のインデックスを取得
+    best_action = legal_actions[best_action_index]  # 価値が最大の行動を取得
+    return best_action
+
+
+# 上位の駒の共通項をくくるcommon_items_
+def action_decision(model_path, ii_state):
+    a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
+    my_piece_set = set(ii_state.my_piece_list)
+    enemy_piece_set = set(ii_state.enemy_piece_list)
+
+    # 自分の駒配置を取得(確定)
+    real_my_piece_blue_set = ii_state.real_my_piece_blue_set
+    real_my_piece_red_set = ii_state.real_my_piece_red_set
+    legal_actions = list(ii_state.legal_actions())
+    actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
+    convert_func = convert_func_use_in_guess(model_path)
+
+    # 価値が上位の世界を抽出
+    en_est_num = ii_state.enemy_estimated_num.copy()
+    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+
+    # 上位の駒をくくる
+    piece_num = [0] * 8
+    # これだと全部くくってるので、適宜削る
+    for est_num in sorted_en_est_num[0 : (len(sorted_en_est_num) // 2) + 1]:
+        for piece_id in est_num[1]:
+            # ここ+1じゃなくて推測値の方がええんかな
+            piece_num[piece_id] += 1
+
+    value_and_id_list = [[1, []]]
+    # 上位4つの駒を抽出
+    piece_num_top_four = sorted(piece_num, reverse=True)[:4]
+    for p_value in piece_num_top_four:
+        value_and_id_list[0][1].append(piece_num.index(p_value))
+
+    # いつもの
+    for num_and_enemy_blue in value_and_id_list:
         enemy_blue_set = set(num_and_enemy_blue[1])
         enemy_red_set = enemy_piece_set - enemy_blue_set
 
@@ -1029,10 +1072,15 @@ def guess_enemy_piece_player_for_debug(
     # )
     # print("盤面：", ii_state)
 
+    # プリントデバッグ的なあれ
     # print("〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜")
     # print("実際の青駒：", ii_state.real_enemy_piece_blue_set)
     # en_est_num = ii_state.enemy_estimated_num.copy()
-    # print("未ソート推測値：", en_est_num)
+    # dead_piece = []
+    # for index, piece in enumerate(ii_state.all_piece):
+    #     if piece == 99:
+    #         dead_piece.append(index)
+    # print("dead_piece:", dead_piece)
     # sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
     # print("推測値：", sorted_en_est_num)
     # print("beforehand_estimated_num:", beforehand_estimated_num)
