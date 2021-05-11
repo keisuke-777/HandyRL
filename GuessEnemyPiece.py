@@ -966,7 +966,7 @@ def no1_action_decision(model_path, ii_state):
 
 
 # 上位の駒の共通項をくくるcommon_items_
-def action_decision(model_path, ii_state):
+def common_items_action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -1014,6 +1014,58 @@ def action_decision(model_path, ii_state):
 
         # 行列演算するためにndarrayに変換
         np_policies = np.array(policies, dtype="f4")
+
+        # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
+        actions_value_sum_list = actions_value_sum_list + (
+            np_policies * num_and_enemy_blue[0]
+        )
+
+    best_action_index = np.argmax(actions_value_sum_list)  # 最大値のインデックスを取得
+    best_action = legal_actions[best_action_index]  # 価値が最大の行動を取得
+    return best_action
+
+
+# 各盤面について方策の正規化を行った上で無難な手を選択normalize_
+def action_decision(model_path, ii_state):
+    a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
+    my_piece_set = set(ii_state.my_piece_list)
+    enemy_piece_set = set(ii_state.enemy_piece_list)
+
+    # 自分の駒配置を取得(確定)
+    real_my_piece_blue_set = ii_state.real_my_piece_blue_set
+    real_my_piece_red_set = ii_state.real_my_piece_red_set
+    legal_actions = list(ii_state.legal_actions())
+    actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
+    convert_func = convert_func_use_in_guess(model_path)
+
+    en_est_num = ii_state.enemy_estimated_num.copy()
+    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+    # 価値が上位の世界を抽出
+    # sorted_en_est_num = sorted_en_est_num[0 : 1 + (len(sorted_en_est_num) // 4)]
+
+    # 相手の70パターンについてforループ(自分のパターンは確定で計算)
+    for num_and_enemy_blue in sorted_en_est_num:
+        enemy_blue_set = set(num_and_enemy_blue[1])
+        enemy_red_set = enemy_piece_set - enemy_blue_set
+
+        # 盤面を6*6*4次元の情報に変換
+        ii_pieces_array = my_looking_create_state(
+            ii_state,
+            real_my_piece_blue_set,
+            real_my_piece_red_set,
+            enemy_blue_set,
+            enemy_red_set,
+        )
+
+        policies = convert_func(ii_pieces_array, legal_actions)
+
+        # 行列演算するためにndarrayに変換
+        np_policies = np.array(policies, dtype="f4")
+
+        # 最小値を0にする
+        np_policies -= np.amin(np_policies)
+        # 最小値0、合計1に正規化する
+        np_policies /= np.sum(np_policies)
 
         # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
         actions_value_sum_list = actions_value_sum_list + (
