@@ -521,12 +521,13 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
 
     global drow_count
     for path in path_list:
-        ii_model_path = "ii_models/" + path + ".pth"
+        print("models:", path)
+        # ii_model_path = "ii_models/" + path + ".pth"
         ci_model_path = "models/" + path + ".pth"
 
         drow_count = 0
         win_player = [0, 0]
-        ii_handy_action = IIHandyAction(ii_model_path)
+        # ii_handy_action = IIHandyAction(ii_model_path)
 
         # print("start compete : (path) " + path)
         for _ in range(100):
@@ -546,11 +547,13 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
 
                 # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
                 if state.depth % 2 == 0:
+                    # 不完全情報でそのまま学習したエージェント
+                    # just_before_action_num = ii_handy_action(
+                    #     state
+                    # )
+
                     # just_before_action_num = random_action(state)  # ランダム
-                    # just_before_action_num = no_cheat_mcts_action(state) #透視なしのMCTS
-                    just_before_action_num = ii_handy_action(
-                        state
-                    )  # 不完全情報でそのまま学習したエージェント
+                    just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
                     # just_before_action_num = handy_action(state)
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
@@ -565,6 +568,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                         ii_state, just_before_action_num, ci_model_path, gamma
                     )
                     # just_before_action_num = random_action(state)  # ランダム
+                    # just_before_action_num = mcts_action(state) #透視MCTS
                     # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
@@ -574,78 +578,20 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                         break
                     # measure_estimate_accuracy(ii_state, state)
                     state = state.next(just_before_action_num)
-            print(win_player)
+            # print(win_player)
             # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
             state.winner_checker(win_player)
         print("結果:", win_player)
 
 
-def main():
-    # 状態の生成
-    state = State()
-
-    ii_state = create_ii_state_from_state(state, True)
-
-    model_path = "10000.pth"
-
-    # 直前の行動を保管
-    just_before_action_num = 0
-
-    # ゲーム終了までのループ
-    while True:
-        # ゲーム終了時
-        if state.is_done():
-            # print("ゲーム終了:ターン数", state.depth)
-
-            # if state.is_lose():
-            #     if state.depth % 2 == 0:
-            #         print("敗北")
-            #     else:
-            #         print("勝利or引き分け")
-            # else:
-            #     if state.depth % 2 == 1:
-            #         print("勝利or引き分け")
-            #     else:
-            #         print("敗北")
-            break
-
-        # 次の状態の取得
-        if state.depth % 2 == 1:
-            just_before_enemy_action_num = just_before_action_num
-            guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
-                model_path, ii_state, just_before_enemy_action_num, gamma
-            )
-            just_before_action_num = guess_player_action
-            # print("自作AIの行動番号", just_before_action_num)
-            if just_before_action_num == 2 or just_before_action_num == 22:
-                state.is_goal = True
-                state.goal_player = 0
-                break
-            state = state.next(just_before_action_num)
-
-            # just_before_action_num = random_action(state)
-            # # print("敵(ランダムAI)の行動番号", just_before_action_num)
-            # state = state.next(just_before_action_num)
-        else:
-            just_before_action_num = random_action(state)
-            if just_before_action_num == 2 or just_before_action_num == 22:
-                state.is_goal = True
-                state.goal_player = 1
-                break
-            # print("ランダムAIの行動番号", just_before_action_num)
-            state = state.next(just_before_action_num)
-
-        # 文字列表示
-        # print("depth", state.depth)
-        print(state)
-
-
 # 動作確認
 if __name__ == "__main__":
-    # main()
     # evaluate_GeisterLog()
     # path_list = ["1", "3000", "5000", "10000"]
-    path_list = ["20000"]
+    # path_list = ["20000"]
+    path_list = []
+    for num in range(1, 44):
+        path_list.append(str(num * 1000))
     # print("0.1だぞおおおおおおおおおおおお")
     # evaluate_HandyGeister(path_list, 0.1)
     # print("0.2だぞおおおおおおおおおおおお")
@@ -662,7 +608,7 @@ if __name__ == "__main__":
     # evaluate_HandyGeister(path_list, 0.7)
     # print("0.8だぞおおおおおおおおおおおお")
     # evaluate_HandyGeister(path_list, 0.8)
-    print("0.9だぞおおおおおおおおおおおお")
+    # print("0.9だぞおおおおおおおおおおおお")
     evaluate_HandyGeister(path_list, 0.9)
     # print("1.0だぞおおおおおおおおおおおお")
     # evaluate_HandyGeister(path_list, 1.0)
