@@ -289,8 +289,11 @@ def human_player_action(state):
     return legal_actions[random.randint(0, len(legal_actions) - 1)]
 
 
-import GuessEnemyPiece
-from GuessEnemyPiece import II_State, create_ii_state_from_state
+from GuessEnemyPiece import (
+    II_State,
+    create_ii_state_from_state,
+    guess_enemy_piece_player,
+)
 import numpy as np
 import itertools
 import time
@@ -613,7 +616,7 @@ def measure_estimate_accuracy(ii_state, state, csvWriter=None):
 # 推測+完全情報の方策を用いた行動決定
 def ci_pridict_action(ii_state, just_before_action_num, model_path, gamma):
     just_before_enemy_action_num = just_before_action_num
-    guess_player_action = GuessEnemyPiece.guess_enemy_piece_player(
+    guess_player_action = guess_enemy_piece_player(
         model_path, ii_state, just_before_enemy_action_num, gamma
     )
     return guess_player_action

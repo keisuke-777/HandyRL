@@ -50,6 +50,7 @@ class II_State:
         self,
         real_my_piece_blue_set,
         real_enemy_piece_blue_set=None,
+        see_through_piece_id=None,
         all_piece=None,
         enemy_estimated_num=None,
         my_estimated_num=None,
@@ -95,13 +96,21 @@ class II_State:
             self.my_piece_list = my_piece_list
 
         # real_my_piece_blue_setは自分の青駒のIDのセット(引数必須)
-        self.real_my_piece_blue_set = real_my_piece_blue_set
+        self.real_my_piece_blue_set = set(real_my_piece_blue_set)
         self.real_my_piece_red_set = (
             set(self.my_piece_list) - self.real_my_piece_blue_set
         )
 
         # 敵の青駒のセット(デバッグ用)
-        self.real_enemy_piece_blue_set = real_enemy_piece_blue_set
+        self.real_enemy_piece_blue_set = set(real_enemy_piece_blue_set)
+        self.real_enemy_piece_red_set = (
+            set(self.enemy_piece_list) - self.real_enemy_piece_blue_set
+        )
+
+        if see_through_piece_id == None:
+            self.see_through_piece_id = []
+        else:
+            self.see_through_piece_id = see_through_piece_id
 
         # {敵青, 敵赤, 自青,　自赤}
         if living_piece_color == None:
@@ -798,29 +807,34 @@ def update_predict_num_normalize(
         en_est_num[0] = (en_est_num[0] * gamma) + action_value
 
 
-# 駒の死亡処理
-# 既存のパターンから推測値を抜き出して新しい推測値を作成
-def reduce_pattern(dead_piece_ID, color_is_blue: bool, ii_state):
-    # print(dead_piece_ID, color_is_blue, ii_state)
-    if dead_piece_ID < 8 and color_is_blue:  # 敵駒 and 駒が青色
-        # dead_piece_IDが含まれていないものを削除(dead_piece_IDが青色で確定するため、それが青色の駒のリストに含まれていないとおかしい)
+# ありえないパターンを消す
+def shave_impossible_pattern(piece_ID: int, color_is_blue: bool, ii_state):
+    if piece_ID < 8 and color_is_blue:  # 敵駒 and 駒が青色
+        # piece_IDが含まれていないものを削除(piece_IDが青色で確定するため、それが青色の駒のリストに含まれていないとおかしい)
         # リストをそのままfor内で削除するとインデックスがバグるのでコピーしたものを参照
         for enemy_estimated_num in ii_state.enemy_estimated_num[:]:
-            if dead_piece_ID not in enemy_estimated_num[1]:
+            if piece_ID not in enemy_estimated_num[1]:
                 ii_state.enemy_estimated_num.remove(enemy_estimated_num)
-    elif dead_piece_ID < 8 and not color_is_blue:  # 敵駒 and 駒が赤色
-        # dead_piece_IDが含まれているものを削除
+    elif piece_ID < 8 and not color_is_blue:  # 敵駒 and 駒が赤色
+        # piece_IDが含まれているものを削除
         for enemy_estimated_num in ii_state.enemy_estimated_num[:]:
-            if dead_piece_ID in enemy_estimated_num[1]:
+            if piece_ID in enemy_estimated_num[1]:
                 ii_state.enemy_estimated_num.remove(enemy_estimated_num)
-    elif dead_piece_ID >= 8 and color_is_blue:  # 自駒 and 駒が青色
+    elif piece_ID >= 8 and color_is_blue:  # 自駒 and 駒が青色
         for my_estimated_num in ii_state.my_estimated_num[:]:
-            if dead_piece_ID not in my_estimated_num[1]:
+            if piece_ID not in my_estimated_num[1]:
                 ii_state.my_estimated_num.remove(my_estimated_num)
-    elif dead_piece_ID >= 8 and not color_is_blue:  # 自駒 and 駒が赤色
+    elif piece_ID >= 8 and not color_is_blue:  # 自駒 and 駒が赤色
         for my_estimated_num in ii_state.my_estimated_num[:]:
-            if dead_piece_ID in my_estimated_num[1]:
+            if piece_ID in my_estimated_num[1]:
                 ii_state.my_estimated_num.remove(my_estimated_num)
+
+
+# 駒の死亡処理
+# 既存のパターンから推測値を抜き出して新しい推測値を作成
+def reduce_pattern(dead_piece_ID: int, color_is_blue: bool, ii_state):
+    # 駒の色が確定するので、ありえないパターンを削げる
+    shave_impossible_pattern(dead_piece_ID, color_is_blue, ii_state)
 
     # all_pieceから削除
     ii_state.all_piece[dead_piece_ID] = 99
@@ -1169,6 +1183,17 @@ def value_ranking_by_board(beforehand_estimated_num, action_num, ii_state):
     # print(top_board)
 
 
+# 透視できている駒のidを用いて推測値から削ぐ
+def shave_impossible_board_from_see_through(ii_state):
+    for piece_id in ii_state.see_through_piece_id:
+        if piece_id in real_enemy_piece_blue_set:
+            shave_impossible_pattern(piece_id, True, ii_state)
+        elif piece_id in real_enemy_piece_red_set:
+            shave_impossible_pattern(piece_id, False, ii_state)
+        else:
+            print("敵の駒のIDではありません")
+
+
 # 行動の一連の処理でii_stateを更新する
 def guess_enemy_piece_player_for_tcp(
     model_path, ii_state, before_tcp_str, now_tcp_str, gamma=default_gamma
@@ -1291,6 +1316,12 @@ if __name__ == "__main__":
     #     "14R24R34R44R15B25B35B45B41u31u21u11u40u30u20u10u",
     #     "14R24R34R44R15B25B35B45B41u32u21u11u40u30u20u10u",
     # )
+
+    #
+    ii_state({8, 9, 10, 11}, {1, 2, 3, 4}, {3, 4, 5, 6})
+    print(ii_state.enemy_estimated_num)
+    shave_impossible_board_from_see_through(ii_state)
+    print(ii_state.enemy_estimated_num)
 
     elapsed_time = time.time() - start
     print("elapsed_time:{0}".format(elapsed_time) + "[sec]")
