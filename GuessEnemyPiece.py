@@ -1061,7 +1061,7 @@ def common_items_action_decision(model_path, ii_state):
 
 
 # 各盤面について方策の正規化を行った上で無難な手を選択normalize_
-def normalize_action_decision(model_path, ii_state):
+def action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -1112,11 +1112,10 @@ def normalize_action_decision(model_path, ii_state):
     return best_action
 
 
-from CompeteInGeister import predict_mcts_action
 from test import HandyAction
 
-# 1位の盤面に対してpolicyを用いたMCTSを実行し行動を決定
-def action_decision(model_path, ii_state):
+# 1位の盤面に対してpolicyを用いたMCTSを実行し行動を決定mcts_
+def mcts_action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -1144,6 +1143,99 @@ def action_decision(model_path, ii_state):
     best_action = predict_mcts_action(state, policy_action)
 
     return best_action
+
+
+import math
+
+# モンテカルロ木探索の行動選択
+def predict_mcts_action(state, policy_action):
+    # モンテカルロ木探索のノード
+    class node:
+        # 初期化
+        def __init__(self, state):
+            self.state = state  # 状態
+            self.w = 0  # 累計価値
+            self.n = 0  # 試行回数
+            self.child_nodes = None  # 子ノード群
+            self.policy_action = policy_action
+
+        # 評価
+        def evaluate(self):
+            if self.state.is_done():
+                value = -1 if self.state.is_lose() else 0  # 負けは-1、引き分けは0
+                self.w += value
+                self.n += 1
+                return value
+
+            # 子ノードが存在しない時
+            if not self.child_nodes:
+                # プレイアウトで価値を取得
+                value = policy_playout(self.state, self.policy_action)
+                self.w += value
+                self.n += 1
+                # 子ノードがない場合は初回探索で木を展開
+                self.expand()
+                return value
+
+            # 子ノードが存在する時
+            else:
+                # UCB1が最大の子ノードの評価で価値を取得
+                value = -self.next_child_node().evaluate()
+
+                # 累計価値と試行回数の更新
+                self.w += value
+                self.n += 1
+                return value
+
+        # 子ノードの展開
+        def expand(self):
+            legal_actions = self.state.legal_actions()
+            self.child_nodes = []
+            for action in legal_actions:
+                self.child_nodes.append(node(self.state.next(action)))
+
+        # UCB1が最大の子ノードを取得
+        def next_child_node(self):
+            # 試行回数nが0の子ノードを返す
+            for child_node in self.child_nodes:
+                if child_node.n == 0:
+                    return child_node
+
+            # UCB1の計算
+            t = 0
+            for c in self.child_nodes:
+                t += c.n
+            ucb1_values = []
+            for child_node in self.child_nodes:
+                ucb1_values.append(
+                    -child_node.w / child_node.n
+                    + 2 * (2 * math.log(t) / child_node.n) ** 0.5
+                )
+            return self.child_nodes[argmax(ucb1_values)]
+
+    # ルートノードの生成
+    root_node = node(state)
+    root_node.expand()
+
+    # ルートノードを評価 (rangeを変化させると評価回数を変化させられる)
+    for _ in range(50):
+        root_node.evaluate()
+
+    # 試行回数の最大値を持つ行動を返す
+    legal_actions = state.legal_actions()
+    n_list = []
+    for c in root_node.child_nodes:
+        n_list.append(c.n)
+    return legal_actions[argmax(n_list)]
+
+
+# 方策を使ってゲームの終端までシミュレート
+def policy_playout(state, policy_action):
+    if state.is_lose():
+        return -1
+    if state.is_draw():
+        return 0
+    return -policy_playout(state.next(policy_action(state)), policy_action)
 
 
 # 駒をテレポート(デバッグ用で破壊的)(敵駒の存在を想定していない)
