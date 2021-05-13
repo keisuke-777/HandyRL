@@ -64,7 +64,7 @@ class State:
 
     # 引き分けかどうか
     def is_draw(self):
-        return self.depth >= 300  # 300手
+        return self.depth >= 150  # 200手
 
     # ゲーム終了かどうか
     def is_done(self):

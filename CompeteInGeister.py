@@ -59,20 +59,30 @@ class State:
     # 負けかどうか
     def is_lose(self):
         if not any(elem == 1 for elem in self.pieces):  # 自分の青駒が存在しないなら負け
-            # print("青喰い")
             return True
         if not any(elem == 2 for elem in self.enemy_pieces):  # 敵の赤駒が存在しない(全部取っちゃった)なら負け
-            # print("赤喰い")
             return True
         # 前の手でゴールされてたらis_goalがTrueになってる(ような仕様にする)
         if self.is_goal:
-            # print("ゴール")
+            return True
+        return False
+
+    # プリントする用途のis_lose
+    def print_is_lose(self):
+        if not any(elem == 1 for elem in self.pieces):  # 自分の青駒が存在しないなら負け
+            print("青喰い")
+            return True
+        if not any(elem == 2 for elem in self.enemy_pieces):  # 敵の赤駒が存在しない(全部取っちゃった)なら負け
+            print("赤喰い")
+            return True
+        if self.is_goal:
+            print("ゴール")
             return True
         return False
 
     # 引き分けかどうか
     def is_draw(self):
-        return self.depth >= 300  # 300手
+        return self.depth >= 150  # 300手
 
     # ゲーム終了かどうか
     def is_done(self):
@@ -423,6 +433,99 @@ def no_cheat_mcts_action(state):
     return mcts_action(return_random_shuffle_state(state))
 
 
+# モンテカルロ木探索の行動選択
+def predict_mcts_action(state, policy_action):
+    # モンテカルロ木探索のノード
+    class node:
+        # 初期化
+        def __init__(self, state):
+            self.state = state  # 状態
+            self.w = 0  # 累計価値
+            self.n = 0  # 試行回数
+            self.child_nodes = None  # 子ノード群
+            self.policy_action = policy_action
+
+        # 評価
+        def evaluate(self):
+            if self.state.is_done():
+                value = -1 if self.state.is_lose() else 0  # 負けは-1、引き分けは0
+                self.w += value
+                self.n += 1
+                return value
+
+            # 子ノードが存在しない時
+            if not self.child_nodes:
+                # プレイアウトで価値を取得
+                value = policy_playout(self.state, self.policy_action)
+                self.w += value
+                self.n += 1
+                # 子ノードがない場合は初回探索で木を展開
+                self.expand()
+                return value
+
+            # 子ノードが存在する時
+            else:
+                # UCB1が最大の子ノードの評価で価値を取得
+                value = -self.next_child_node().evaluate()
+
+                # 累計価値と試行回数の更新
+                self.w += value
+                self.n += 1
+                return value
+
+        # 子ノードの展開
+        def expand(self):
+            legal_actions = self.state.legal_actions()
+            self.child_nodes = []
+            for action in legal_actions:
+                self.child_nodes.append(node(self.state.next(action)))
+
+        # UCB1が最大の子ノードを取得
+        def next_child_node(self):
+            # 試行回数nが0の子ノードを返す
+            for child_node in self.child_nodes:
+                if child_node.n == 0:
+                    return child_node
+
+            # UCB1の計算
+            t = 0
+            for c in self.child_nodes:
+                t += c.n
+            ucb1_values = []
+            for child_node in self.child_nodes:
+                ucb1_values.append(
+                    -child_node.w / child_node.n
+                    + 2 * (2 * math.log(t) / child_node.n) ** 0.5
+                )
+
+            # UCB1が最大の子ノードを返す
+            return self.child_nodes[argmax(ucb1_values)]
+
+    # ルートノードの生成
+    root_node = node(state)
+    root_node.expand()
+
+    # ルートノードを評価 (rangeを変化させると評価回数を変化させられる)
+    for _ in range(50):
+        root_node.evaluate()
+
+    # 試行回数の最大値を持つ行動を返す
+    legal_actions = state.legal_actions()
+    n_list = []
+    for c in root_node.child_nodes:
+        n_list.append(c.n)
+    return legal_actions[argmax(n_list)]
+
+
+# 方策を使ってゲームの終端までシミュレート
+def policy_playout(state, policy_action):
+    if state.is_lose():
+        return -1
+    if state.is_draw():
+        return 0
+    return -policy_playout(state.next(policy_action(state)), policy_action)
+
+
 # どれほど正確に推論できているかどうかを計測する
 # 正常に動作しません
 def measure_estimate_accuracy(ii_state, state, csvWriter=None):
@@ -510,7 +613,7 @@ def measure_estimate_accuracy(ii_state, state, csvWriter=None):
 # 推測+完全情報の方策を用いた行動決定
 def ci_pridict_action(ii_state, just_before_action_num, model_path, gamma):
     just_before_enemy_action_num = just_before_action_num
-    guess_player_action = GuessEnemyPiece.guess_enemy_piece_player_for_debug(
+    guess_player_action = GuessEnemyPiece.guess_enemy_piece_player(
         model_path, ii_state, just_before_enemy_action_num, gamma
     )
     return guess_player_action
@@ -542,7 +645,19 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
 
             # ゲーム終了までループ
             while True:
+                # print(state)
                 if state.is_done():
+                    print("ゲーム終了:ターン数", state.depth)
+                    if state.print_is_lose():
+                        if state.depth % 2 == 0:
+                            print("敗北")
+                        else:
+                            print("勝利or引き分け")
+                    else:
+                        if state.depth % 2 == 1:
+                            print("勝利or引き分け")
+                        else:
+                            print("敗北")
                     break
 
                 # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
@@ -557,7 +672,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                     # just_before_action_num = handy_action(state)
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
-                        # print("先手ゴール")
+                        print("先手ゴール")
                         state.is_goal = True
                         state.goal_player = 0
                         break
@@ -572,15 +687,15 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                     # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
-                        # print("後手ゴール", just_before_action_num)
+                        print("後手ゴール", just_before_action_num)
                         state.is_goal = True
                         state.goal_player = 1
                         break
                     # measure_estimate_accuracy(ii_state, state)
                     state = state.next(just_before_action_num)
-            # print(win_player)
             # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
             state.winner_checker(win_player)
+            print(win_player)
         print("結果:", win_player)
 
 
@@ -588,10 +703,12 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
 if __name__ == "__main__":
     # evaluate_GeisterLog()
     # path_list = ["1", "3000", "5000", "10000"]
-    # path_list = ["20000"]
-    path_list = []
-    for num in range(1, 44):
-        path_list.append(str(num * 4000))
+    path_list = ["40000"]
+
+    # path_list = []
+    # for num in range(1, 44):
+    #     path_list.append(str(num * 4000))
+
     # print("0.1だぞおおおおおおおおおおおお")
     # evaluate_HandyGeister(path_list, 0.1)
     # print("0.2だぞおおおおおおおおおおおお")

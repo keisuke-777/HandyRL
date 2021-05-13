@@ -62,9 +62,14 @@ def evaluate_best_player():
     # HandyRLの方策を短絡的に選択するエージェント
     from test import HandyAction
 
-    handy_action = HandyAction("models/15000.pth")
+    handy_action = HandyAction("models/40000.pth")
     # from test import IIHandyAction
     # handy_action = IIHandyAction("ii_models/10000.pth")
+
+    # # VS過去の自分
+    handy_action_bf = HandyAction("models/20000.pth")
+    next_actions = (handy_action, handy_action_bf)
+    evaluate_algorithm_of("VS_過去の自分", next_actions)
 
     # # VSランダム
     # next_actions = (handy_action, random_action)
@@ -80,11 +85,11 @@ def evaluate_best_player():
     # evaluate_algorithm_of("VS_Handy", next_actions)
 
     # VS不完全情報で行動を選択するHandyRLエージェント
-    from test import IIHandyAction
+    # from test import IIHandyAction
 
-    ii_handy_action = IIHandyAction("ii_models/20000.pth")
-    next_actions = (handy_action, ii_handy_action)
-    evaluate_algorithm_of("VS_iiHandy", next_actions)
+    # ii_handy_action = IIHandyAction("ii_models/20000.pth")
+    # next_actions = (handy_action, ii_handy_action)
+    # evaluate_algorithm_of("VS_iiHandy", next_actions)
 
     # VS人間
     # next_actions = (handy_action, human_player_action)

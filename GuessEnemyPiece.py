@@ -376,6 +376,27 @@ def create_ii_state_from_state(state, enemy_view=False):
     return ii_state
 
 
+def create_state_from_ii_state(ii_state, blue_set):
+    pieces = [0] * 36
+    enemy_pieces = [0] * 36
+    # 0~7は敵の駒
+    for index, piece_coo in enumerate(ii_state.all_piece[:8]):
+        if piece_coo < 36:
+            if index in blue_set:
+                enemy_pieces[35 - piece_coo] = 1
+            else:
+                enemy_pieces[35 - piece_coo] = 2
+    for index, piece_coo in enumerate(ii_state.all_piece[8:]):
+        if piece_coo < 36:
+            if index + 8 in ii_state.real_my_piece_blue_set:
+                pieces[piece_coo] = 1
+            else:
+                pieces[piece_coo] = 2
+
+    state = State(pieces, enemy_pieces)
+    return state
+
+
 ### ガイスターAI大会のプロトコル周り
 
 # プロトコルから相手の行動は送られず、更新されたボードが送られてくるそうなので、行動した駒の座標を求める
@@ -1026,7 +1047,7 @@ def common_items_action_decision(model_path, ii_state):
 
 
 # 各盤面について方策の正規化を行った上で無難な手を選択normalize_
-def action_decision(model_path, ii_state):
+def normalize_action_decision(model_path, ii_state):
     a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
     my_piece_set = set(ii_state.my_piece_list)
     enemy_piece_set = set(ii_state.enemy_piece_list)
@@ -1077,6 +1098,40 @@ def action_decision(model_path, ii_state):
     return best_action
 
 
+from CompeteInGeister import predict_mcts_action
+from test import HandyAction
+
+# 1位の盤面に対してpolicyを用いたMCTSを実行し行動を決定
+def action_decision(model_path, ii_state):
+    a, b, c = DN_INPUT_SHAPE  # (6, 6, 4)
+    my_piece_set = set(ii_state.my_piece_list)
+    enemy_piece_set = set(ii_state.enemy_piece_list)
+
+    # 自分の駒配置を取得(確定)
+    real_my_piece_blue_set = ii_state.real_my_piece_blue_set
+    real_my_piece_red_set = ii_state.real_my_piece_red_set
+    legal_actions = list(ii_state.legal_actions())
+    actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
+
+    # 価値が上位の世界を抽出
+    en_est_num = ii_state.enemy_estimated_num.copy()
+    sorted_en_est_num = sorted(en_est_num, reverse=True, key=lambda x: x[0])
+    # 価値が1位の世界を抽出
+    sorted_en_est_num = sorted_en_est_num[0]
+
+    # 価値が1位の盤面が、実際の盤面であると仮定しstateを取得
+    state = create_state_from_ii_state(ii_state, sorted_en_est_num[1])
+
+    # MCTSが本当に正常に動作してるのか確かめるやつ(後で消す)
+    # state = create_state_from_ii_state(ii_state, ii_state.real_enemy_piece_blue_set)
+
+    # stateを利用しMCTS
+    policy_action = HandyAction(model_path)
+    best_action = predict_mcts_action(state, policy_action)
+
+    return best_action
+
+
 # 駒をテレポート(デバッグ用で破壊的)(敵駒の存在を想定していない)
 def teleport(ii_state, before, now):
     name = np.where(ii_state.all_piece == before)[0][0]
@@ -1115,7 +1170,7 @@ def value_ranking_by_board(beforehand_estimated_num, action_num, ii_state):
 
 
 # 行動の一連の処理でii_stateを更新する
-def guess_enemy_piece_player(
+def guess_enemy_piece_player_for_tcp(
     model_path, ii_state, before_tcp_str, now_tcp_str, gamma=default_gamma
 ):
     # 相手の盤面から全ての行動の推測値を計算しておく
@@ -1155,10 +1210,9 @@ def guess_enemy_piece_player(
     return action_num
 
 
-# デバッグ用(tcpを受けずに直接行動番号を受ける)(これを正式にして本家を分家にした方が良いのでは)
-def guess_enemy_piece_player_for_debug(
-    model_path, ii_state, just_before_enemy_action_num, gamma
-):
+# tcpを受けずに直接行動番号を受ける
+# 推測値の事前計算->推測値の更新->相手の行動からii_stateの更新->行動決定->自分の行動からii_stateを更新
+def guess_enemy_piece_player(model_path, ii_state, just_before_enemy_action_num, gamma):
     # 相手の盤面から全ての行動の推測値を計算しておく
     # print("推測値を算出中")
     beforehand_estimated_num = enemy_ii_predict(model_path, ii_state)
@@ -1237,14 +1291,6 @@ if __name__ == "__main__":
     #     "14R24R34R44R15B25B35B45B41u31u21u11u40u30u20u10u",
     #     "14R24R34R44R15B25B35B45B41u32u21u11u40u30u20u10u",
     # )
-
-    teleport(ii_state, 10, 22)  # 10の敵駒を22に移動
-    guess_enemy_piece_player(
-        model,
-        ii_state,
-        "14R24R34R44R15B25B35B45B43u31u21u11u40u30u20u10u",
-        "14R24R34R44R15B25B35B45B44u31u21u11u40u30u20u10u",
-    )
 
     elapsed_time = time.time() - start
     print("elapsed_time:{0}".format(elapsed_time) + "[sec]")
