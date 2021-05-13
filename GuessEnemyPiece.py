@@ -107,11 +107,6 @@ class II_State:
             set(self.enemy_piece_list) - self.real_enemy_piece_blue_set
         )
 
-        if see_through_piece_id == None:
-            self.see_through_piece_id = []
-        else:
-            self.see_through_piece_id = see_through_piece_id
-
         # {敵青, 敵赤, 自青,　自赤}
         if living_piece_color == None:
             self.living_piece_color = [4, 4, 4, 4]
@@ -138,6 +133,13 @@ class II_State:
                 self.my_estimated_num.append([0, my_blue])
         else:
             self.my_estimated_num = my_estimated_num
+
+        if see_through_piece_id == None:
+            self.see_through_piece_id = []
+        else:
+            self.see_through_piece_id = see_through_piece_id
+            # ありえない世界は初期化段階で消す
+            shave_impossible_board_from_see_through(self)
 
     #   ボードの初期配置はこんな感じ(小文字が敵の駒で大文字が自分の駒)
     #     0 1 2 3 4 5
@@ -341,8 +343,29 @@ class II_State:
         return ii_str
 
 
+# 盤面が確定しないような駒を選択する
+def create_see_through_piece(enemy_blue_piece_set, through_num):
+    # 7個以上駒の色がわかるなら、全部わかるのと同意義
+    if through_num >= 7:
+        return set({0, 1, 2, 3, 4, 5, 6, 7})
+    blue_piece_set = enemy_blue_piece_set.copy()
+    red_piece_set = set({0, 1, 2, 3, 4, 5, 6, 7}) - blue_piece_set
+
+    # 赤と青から1つ除外(これでパターンが確定しない)
+    blue_piece_set.remove(random.choice(list(blue_piece_set)))
+    red_piece_set.remove(random.choice(list(red_piece_set)))
+
+    # セットの合成
+    see_thorugh_id_set = blue_piece_set | red_piece_set
+
+    # through_numが少ない場合は見える駒を多く除外する
+    for _ in range(6 - through_num):  # 6は len(see_thorugh_id_set)
+        see_thorugh_id_set.remove(random.choice(list(see_thorugh_id_set)))
+    return see_thorugh_id_set
+
+
 # stateの駒の色に応じたii_stateを作成する(初期のstateのみ使用可能)
-def create_ii_state_from_state(state, enemy_view=False):
+def create_ii_state_from_state(state, enemy_view=False, through_num=0):
     if enemy_view:
         # 敵視点でii_stateを作成
         pieces = state.enemy_pieces
@@ -381,7 +404,15 @@ def create_ii_state_from_state(state, enemy_view=False):
     for piece_coo in enemy_blue_piece_set:
         rev_enemy_blue_piece_set.add(15 - piece_coo)
 
-    ii_state = II_State(blue_piece_set, rev_enemy_blue_piece_set)
+    if through_num == 0:
+        ii_state = II_State(blue_piece_set, rev_enemy_blue_piece_set)
+    else:
+        see_thorugh_id_set = create_see_through_piece(
+            rev_enemy_blue_piece_set, through_num
+        )
+        ii_state = II_State(
+            blue_piece_set, rev_enemy_blue_piece_set, see_thorugh_id_set
+        )
     return ii_state
 
 
@@ -1135,9 +1166,6 @@ def mcts_action_decision(model_path, ii_state):
     # 価値が1位の盤面が、実際の盤面であると仮定しstateを取得
     state = create_state_from_ii_state(ii_state, sorted_en_est_num[1])
 
-    # MCTSが本当に正常に動作してるのか確かめるやつ(後で消す)
-    # state = create_state_from_ii_state(ii_state, ii_state.real_enemy_piece_blue_set)
-
     # stateを利用しMCTS
     policy_action = HandyAction(model_path)
     best_action = predict_mcts_action(state, policy_action)
@@ -1238,6 +1266,27 @@ def policy_playout(state, policy_action):
     return -policy_playout(state.next(policy_action(state)), policy_action)
 
 
+import random
+
+# あり得る世界からランダムに1つ選択し、その世界に対して最も適切な行動をとるrand_world_
+def rand_world_action(model_path):
+    policy_action = HandyAction(model_path)
+
+    def rand_world_action(ii_state):
+        # あり得る世界からランダムに1つ選出
+        possible_worlds_num = len(ii_state.enemy_estimated_num)
+        world_piece_set = ii_state.enemy_estimated_num[
+            random.randrange(possible_worlds_num)
+        ][1]
+
+        # 選出した世界からstateを取得し、方策の値が最も高い行動を選択
+        state = create_state_from_ii_state(ii_state, world_piece_set)
+        best_action = policy_action(state)
+        return best_action
+
+    return rand_world_action
+
+
 # 駒をテレポート(デバッグ用で破壊的)(敵駒の存在を想定していない)
 def teleport(ii_state, before, now):
     name = np.where(ii_state.all_piece == before)[0][0]
@@ -1278,9 +1327,9 @@ def value_ranking_by_board(beforehand_estimated_num, action_num, ii_state):
 # 透視できている駒のidを用いて推測値から削ぐ
 def shave_impossible_board_from_see_through(ii_state):
     for piece_id in ii_state.see_through_piece_id:
-        if piece_id in real_enemy_piece_blue_set:
+        if piece_id in ii_state.real_enemy_piece_blue_set:
             shave_impossible_pattern(piece_id, True, ii_state)
-        elif piece_id in real_enemy_piece_red_set:
+        elif piece_id in ii_state.real_enemy_piece_red_set:
             shave_impossible_pattern(piece_id, False, ii_state)
         else:
             print("敵の駒のIDではありません")
@@ -1319,6 +1368,26 @@ def guess_enemy_piece_player_for_tcp(
     # 行動を受けて自分の推測値を更新
     # beforehand_my_estimated_num = my_ii_predict(model, ii_state)
     # (未実装)update_my_predict_num_all(ii_state, beforehand_my_estimated_num, action_num)
+
+    # 自分の決定した行動でii_stateを更新
+    ii_state.next(action_num)
+
+    # 行動番号を返す
+    return action_num
+
+
+# 推測をしない(推測値を更新しない)
+# 相手の行動からii_stateの更新->行動決定->自分の行動からii_stateを更新
+def ii_state_action(rw_action, ii_state, just_before_enemy_action_num):
+    if just_before_enemy_action_num != -1:
+        # 相手の行動からボードを更新
+        before, now = action_to_coordinate(just_before_enemy_action_num)
+        my_find_before = 35 - before  # このままでは相手視点の座標なので、自分視点の座標に変換
+        my_find_now = 35 - now  # 同様に変換
+        kill = update_II_state(ii_state, my_find_before, my_find_now)  # 相手の行動をボードに反映
+
+    # 行動を決定
+    action_num = rw_action(ii_state)
 
     # 自分の決定した行動でii_stateを更新
     ii_state.next(action_num)
@@ -1398,22 +1467,14 @@ if __name__ == "__main__":
     start = time.time()
     # path = sorted(Path("./model").glob("*.h5"))[-1]
     # model = load_model(str(path))
-    # ii_state = II_State({8, 9, 10, 11})
 
-    # reduce_pattern(4, True, ii_state)
-
-    # guess_enemy_piece_player(
-    #     model,
-    #     ii_state,
-    #     "14R24R34R44R15B25B35B45B41u31u21u11u40u30u20u10u",
-    #     "14R24R34R44R15B25B35B45B41u32u21u11u40u30u20u10u",
-    # )
-
-    #
-    ii_state({8, 9, 10, 11}, {1, 2, 3, 4}, {3, 4, 5, 6})
-    print(ii_state.enemy_estimated_num)
-    shave_impossible_board_from_see_through(ii_state)
-    print(ii_state.enemy_estimated_num)
+    # ii_state = II_State({8, 9, 10, 11}, {0, 1, 2, 3})
+    ii_state = II_State({8, 9, 10, 11}, {0, 1, 2, 3}, {2, 3, 4, 5})
+    print("初期値：", ii_state.enemy_estimated_num)
+    reduce_pattern(4, False, ii_state)
+    print("4赤(透視済)：", ii_state.enemy_estimated_num)
+    reduce_pattern(1, True, ii_state)
+    print("1青(未透視)：", ii_state.enemy_estimated_num)
 
     elapsed_time = time.time() - start
     print("elapsed_time:{0}".format(elapsed_time) + "[sec]")

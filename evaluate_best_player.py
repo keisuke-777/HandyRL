@@ -67,17 +67,17 @@ def evaluate_best_player():
     # handy_action = IIHandyAction("ii_models/10000.pth")
 
     # # VS過去の自分
-    handy_action_bf = HandyAction("models/20000.pth")
-    next_actions = (handy_action, handy_action_bf)
-    evaluate_algorithm_of("VS_過去の自分", next_actions)
+    # handy_action_bf = HandyAction("models/20000.pth")
+    # next_actions = (handy_action, handy_action_bf)
+    # evaluate_algorithm_of("VS_過去の自分", next_actions)
 
     # # VSランダム
     # next_actions = (handy_action, random_action)
     # evaluate_algorithm_of("VS_Random", next_actions)
 
     # # VSモンテカルロ木探索
-    # next_actions = (handy_action, mcts_action)
-    # evaluate_algorithm_of("VS_MCTS", next_actions)
+    next_actions = (handy_action, mcts_action)
+    evaluate_algorithm_of("VS_MCTS", next_actions)
 
     # # VSモデルを変更して比較するHandyRL
     # handy_action_two = HandyAction("ii_models/20000.pth")

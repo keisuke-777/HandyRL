@@ -529,6 +529,71 @@ def ci_pridict_action(ii_state, just_before_action_num, model_path, gamma):
     return guess_player_action
 
 
+# 駒を何個透視できれば勝てるのかを検証
+def evaluate_shave_impossible_board(path_list=["latest"]):
+    from GuessEnemyPiece import rand_world_action, ii_state_action
+
+    for path in path_list:
+        print("models:", path)
+        win_player = [0, 0]
+        ci_model_path = "models/" + path + ".pth"
+        rw_action = rand_world_action(ci_model_path)
+        # ii_model_path = "ii_models/" + path + ".pth"
+        # ii_handy_action = IIHandyAction(ii_model_path)
+        # ii_handy_action = IIHandyAction("models/20000.pth")
+
+        buttle_num = 100
+        for _ in range(buttle_num):
+            state = State()
+            p0_ii_state = create_ii_state_from_state(state, False, 4)
+            p1_ii_state = create_ii_state_from_state(state, True, 4)
+            action_num = -1
+
+            # ゲーム終了までループ
+            while True:
+                if state.is_done():
+                    break
+                # p0のターン
+                if state.depth % 2 == 0:
+                    # action_num = ii_handy_action(state)  # 不完全情報でそのまま学習したエージェント
+                    # action_num = random_action(state)  # ランダム
+                    # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+                    # action_num = handy_action(state)
+                    action_num = ii_state_action(
+                        rw_action, p0_ii_state, action_num
+                    )  # 推測なしのii_stateで行動決定
+
+                    if action_num == 2 or action_num == 22:
+                        state.is_goal = True
+                        state.goal_player = 0
+                        break
+                    state = state.next(action_num)
+                # p1のターン
+                else:
+                    # action_num = random_action(state)  # ランダム
+                    # action_num = mcts_action(state) #透視MCTS
+                    # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+                    action_num = ii_state_action(
+                        rw_action, p1_ii_state, action_num
+                    )  # 推測なしのii_stateで行動決定
+
+                    if action_num == 2 or action_num == 22:
+                        # print("ゴール")
+                        state.is_goal = True
+                        state.goal_player = 1
+                        break
+                    state = state.next(action_num)
+            # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
+            state.winner_checker(win_player)
+            print(win_player)
+        print(
+            "結果:",
+            win_player[0],
+            win_player[1],
+            buttle_num - win_player[0] - win_player[1],
+        )
+
+
 def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
     from test import HandyAction
 
@@ -536,11 +601,11 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
     for path in path_list:
         print("models:", path)
         # ii_model_path = "ii_models/" + path + ".pth"
+        # ii_handy_action = IIHandyAction(ii_model_path)
         ci_model_path = "models/" + path + ".pth"
 
         drow_count = 0
         win_player = [0, 0]
-        # ii_handy_action = IIHandyAction(ii_model_path)
 
         # print("start compete : (path) " + path)
         for _ in range(100):
@@ -619,24 +684,9 @@ if __name__ == "__main__":
     # for num in range(1, 44):
     #     path_list.append(str(num * 4000))
 
-    # print("0.1だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.1)
-    # print("0.2だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.2)
-    # print("0.3だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.3)
-    # print("0.4だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.4)
-    # print("0.5だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.5)
-    # print("0.6だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.6)
-    # print("0.7だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.7)
-    # print("0.8だぞおおおおおおおおおおおお")
-    # evaluate_HandyGeister(path_list, 0.8)
-    # print("0.9だぞおおおおおおおおおおおお")
-    evaluate_HandyGeister(path_list, 0.9)
-    # print("1.0だぞおおおおおおおおおおおお")
+    # print("gamma:0.9")
+    # evaluate_HandyGeister(path_list, 0.9)
+    # print("gamma:1.0")
     # evaluate_HandyGeister(path_list, 1.0)
+    evaluate_shave_impossible_board(path_list)
 
