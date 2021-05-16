@@ -531,13 +531,14 @@ def ci_pridict_action(ii_state, just_before_action_num, model_path, gamma):
 
 # 駒を何個透視できれば勝てるのかを検証
 def evaluate_shave_impossible_board(path_list=["latest"]):
-    from GuessEnemyPiece import rand_world_action, ii_state_action
+    from GuessEnemyPiece import rand_world_action, ii_state_action, rand_n_world_action
 
     for path in path_list:
         print("models:", path)
         win_player = [0, 0]
         ci_model_path = "models/" + path + ".pth"
-        rw_action = rand_world_action(ci_model_path)
+        # rw_action = rand_world_action(ci_model_path)
+        rw_action = rand_n_world_action(ci_model_path, 4)
         # ii_model_path = "ii_models/" + path + ".pth"
         # ii_handy_action = IIHandyAction(ii_model_path)
         ii_handy_action = IIHandyAction("models/20000.pth")

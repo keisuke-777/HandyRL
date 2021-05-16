@@ -1053,7 +1053,8 @@ def action_decision_legacy(model_path, ii_state):
     real_my_piece_blue_set = ii_state.real_my_piece_blue_set
     real_my_piece_red_set = ii_state.real_my_piece_red_set
 
-    legal_actions = list(ii_state.legal_actions())
+    # legal_actions = list(ii_state.legal_actions()) #これがソートしてなかったせいでバグってた説ある
+    legal_actions = sorted(list(ii_state.legal_actions()), key=lambda x: x)
 
     actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
 
@@ -1097,7 +1098,7 @@ def half_action_decision(model_path, ii_state):
     # 自分の駒配置を取得(確定)
     real_my_piece_blue_set = ii_state.real_my_piece_blue_set
     real_my_piece_red_set = ii_state.real_my_piece_red_set
-    legal_actions = list(ii_state.legal_actions())
+    legal_actions = sorted(list(ii_state.legal_actions()), key=lambda x: x)
     actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
     convert_func = convert_func_use_in_guess(model_path)
 
@@ -1144,7 +1145,7 @@ def no1_action_decision(model_path, ii_state):
     # 自分の駒配置を取得(確定)
     real_my_piece_blue_set = ii_state.real_my_piece_blue_set
     real_my_piece_red_set = ii_state.real_my_piece_red_set
-    legal_actions = list(ii_state.legal_actions())
+    legal_actions = sorted(list(ii_state.legal_actions()), key=lambda x: x)
     actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
     convert_func = convert_func_use_in_guess(model_path)
 
@@ -1192,7 +1193,7 @@ def common_items_action_decision(model_path, ii_state):
     # 自分の駒配置を取得(確定)
     real_my_piece_blue_set = ii_state.real_my_piece_blue_set
     real_my_piece_red_set = ii_state.real_my_piece_red_set
-    legal_actions = list(ii_state.legal_actions())
+    legal_actions = sorted(list(ii_state.legal_actions()), key=lambda x: x)
     actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
     convert_func = convert_func_use_in_guess(model_path)
 
@@ -1252,7 +1253,7 @@ def action_decision(model_path, ii_state):
     # 自分の駒配置を取得(確定)
     real_my_piece_blue_set = ii_state.real_my_piece_blue_set
     real_my_piece_red_set = ii_state.real_my_piece_red_set
-    legal_actions = list(ii_state.legal_actions())
+    legal_actions = sorted(list(ii_state.legal_actions()), key=lambda x: x)
     actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
     convert_func = convert_func_use_in_guess(model_path)
 
@@ -1306,7 +1307,7 @@ def mcts_action_decision(model_path, ii_state):
     # 自分の駒配置を取得(確定)
     real_my_piece_blue_set = ii_state.real_my_piece_blue_set
     real_my_piece_red_set = ii_state.real_my_piece_red_set
-    legal_actions = list(ii_state.legal_actions())
+    legal_actions = sorted(list(ii_state.legal_actions()), key=lambda x: x)
     actions_value_sum_list = np.array([0] * len(legal_actions), dtype="f4")
 
     # 価値が上位の世界を抽出
@@ -1437,6 +1438,59 @@ def rand_world_action(model_path):
         return best_action
 
     return rand_world_action
+
+
+from test import PredictPolicy
+
+# あり得る世界からランダムにn通り選択し、その世界に対して最も適切な行動をとるrand_n_world_
+def rand_n_world_action(model_path, n):
+    policy_action = PredictPolicy(model_path)
+
+    def rand_n_world_action(ii_state):
+        # あり得る世界からランダムにいくつか選出
+        possible_worlds_num = len(ii_state.enemy_estimated_num)
+        if possible_worlds_num < n:
+            pic_num = possible_worlds_num
+        else:
+            pic_num = n
+
+        # ランダムにn個の世界を選出
+        pic_world_list = random.sample(list(range(possible_worlds_num)), pic_num)
+        world_piece_set_list = []
+        for pic_world in pic_world_list:
+            world_piece_set_list.append(ii_state.enemy_estimated_num[pic_world][1])
+
+        legal_actions = sorted(ii_state.legal_actions(), key=lambda x: x)
+        legal_num = len(legal_actions)
+        actions_value_sum_list = np.array([0] * legal_num, dtype="f4")
+        for world_piece_set in world_piece_set_list:
+            # 選出した世界からstateを取得し、方策の値が最も高い行動を選択
+            state = create_state_from_ii_state(ii_state, world_piece_set)
+            action_and_policy = policy_action(state)
+
+            action_and_policy = sorted(
+                [(a[0], a[1]) for a in action_and_policy], key=lambda x: x[0],
+            )
+            policies = [0] * legal_num
+            for index, ap in enumerate(action_and_policy):
+                policies[index] = ap[1]
+
+            # 行列演算するためにndarrayに変換
+            np_policies = np.array(policies, dtype="f4")
+
+            # 最小値を0にする
+            np_policies -= np.amin(np_policies)
+            # 最小値0、合計1に正規化する
+            np_policies /= np.sum(np_policies)
+
+            # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
+            actions_value_sum_list = actions_value_sum_list + np_policies
+
+        best_action = legal_actions[np.argmax(actions_value_sum_list)]
+
+        return best_action
+
+    return rand_n_world_action
 
 
 # 駒をテレポート(デバッグ用で破壊的)(敵駒の存在を想定していない)

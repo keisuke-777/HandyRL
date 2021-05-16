@@ -409,6 +409,20 @@ def HandyAction(path):
     return HandyAction
 
 
+# 基本的にはHandyActionと同じだが、actionとpolocyの一覧を返す
+def PredictPolicy(path):
+    env = Environment()
+    env.reset()
+    agent = make_agent(env, path)
+
+    def PredictPolicy(state):
+        obs = convert_state_to_obs(state)
+        ap_list = obs_to_policy_to_use_game(agent, obs, state)
+        return ap_list
+
+    return PredictPolicy
+
+
 # 不完全情報で最も利得の高い行動を選択する
 def IIHandyAction(path):
     env = Environment()
