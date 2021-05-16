@@ -51,6 +51,7 @@ class II_State:
         real_my_piece_blue_set,
         real_enemy_piece_blue_set=None,
         see_through_piece_id=None,
+        wrong_see_through_piece_id=None,
         all_piece=None,
         enemy_estimated_num=None,
         my_estimated_num=None,
@@ -134,12 +135,29 @@ class II_State:
         else:
             self.my_estimated_num = my_estimated_num
 
-        if see_through_piece_id == None:
+        if see_through_piece_id == None and wrong_see_through_piece_id == None:
             self.see_through_piece_id = []
-        else:
+            self.wrong_see_through_piece_id = []
+        elif wrong_see_through_piece_id == None:  # 間違った推測のみnullだった場合
             self.see_through_piece_id = see_through_piece_id
-            # ありえない世界は初期化段階で消す
-            shave_impossible_board_from_see_through(self)
+            self.wrong_see_through_piece_id = []
+            shave_impossible_board_from_see_through(self)  # ありえない世界を初期化段階で消す
+        elif see_through_piece_id == None:
+            self.see_through_piece_id = []
+            self.wrong_see_through_piece_id = wrong_see_through_piece_id
+            rebuilding_estimated_num(
+                self,
+                set(self.see_through_piece_id),
+                set(self.wrong_see_through_piece_id),
+            )
+        else:  # どっちもnullでない
+            self.see_through_piece_id = see_through_piece_id
+            self.wrong_see_through_piece_id = wrong_see_through_piece_id
+            rebuilding_estimated_num(
+                self,
+                set(self.see_through_piece_id),
+                set(self.wrong_see_through_piece_id),
+            )
 
     #   ボードの初期配置はこんな感じ(小文字が敵の駒で大文字が自分の駒)
     #     0 1 2 3 4 5
@@ -267,6 +285,12 @@ class II_State:
                     i == dead_piece_ID for i in self.real_enemy_piece_blue_set
                 )
                 reduce_pattern(dead_piece_ID, color_is_blue, self)
+                if self.wrong_see_through_piece_id != []:
+                    rebuilding_estimated_num(
+                        self,
+                        set(self.see_through_piece_id),
+                        set(self.wrong_see_through_piece_id),
+                    )
             else:  # 死んだのが味方の駒
                 color_is_blue = any(
                     i == dead_piece_ID for i in self.real_my_piece_blue_set
@@ -364,8 +388,76 @@ def create_see_through_piece(enemy_blue_piece_set, through_num):
     return see_thorugh_id_set
 
 
+# まちがった推測を含めて、破綻しない推測を作成
+def create_wrong_and_see_through_piece(
+    enemy_blue_piece_set: set, correct_through_num: int, wrong_through_num: int
+):
+    blue_piece_set = enemy_blue_piece_set.copy()
+    red_piece_set = set({0, 1, 2, 3, 4, 5, 6, 7}) - blue_piece_set
+
+    est_num = correct_through_num + wrong_through_num
+    if est_num >= 9:
+        print("普通にバグ")
+        return
+    if est_num >= 7:  # 7個以上駒の色がわかるなら、全部わかるのと同意義
+        estimated_piece_set = set({0, 1, 2, 3, 4, 5, 6, 7})
+    else:
+        # 赤と青から1つ除外(これでパターンが確定しない)
+        blue_piece_set.remove(random.choice(list(blue_piece_set)))
+        red_piece_set.remove(random.choice(list(red_piece_set)))
+
+        # 赤と青から均等に推測駒を出す
+        while len(blue_piece_set) + len(red_piece_set) > est_num:
+            if len(blue_piece_set) > len(red_piece_set):
+                blue_piece_set.remove(random.choice(list(blue_piece_set)))
+            elif len(blue_piece_set) < len(red_piece_set):
+                red_piece_set.remove(random.choice(list(red_piece_set)))
+            else:  # redとblueが同じ量の場合はランダムピック
+                if random.randint(0, 1) == 0:
+                    blue_piece_set.remove(random.choice(list(blue_piece_set)))
+                else:
+                    red_piece_set.remove(random.choice(list(red_piece_set)))
+
+    wrong_piece_set = set()
+    cp_wrong_through_num = wrong_through_num
+    # wrong_through_numが奇数の場合
+    if cp_wrong_through_num % 2 == 1:
+        cp_wrong_through_num -= 1
+        if len(blue_piece_set) > len(red_piece_set):
+            piece = random.choice(list(blue_piece_set))
+            blue_piece_set.remove(piece)
+            wrong_piece_set.add(piece)
+        elif len(blue_piece_set) < len(red_piece_set):
+            piece = random.choice(list(red_piece_set))
+            red_piece_set.remove(piece)
+            wrong_piece_set.add(piece)
+        else:  # redとblueが同じ量の場合はランダムピック
+            if random.randint(0, 1) == 0:
+                piece = random.choice(list(blue_piece_set))
+                blue_piece_set.remove(piece)
+                wrong_piece_set.add(piece)
+            else:
+                piece = random.choice(list(red_piece_set))
+                red_piece_set.remove(piece)
+                wrong_piece_set.add(piece)
+
+    # wrong_through_numの数だけ間違った推測駒を増やす
+    for _ in range(cp_wrong_through_num // 2):
+        piece = random.choice(list(blue_piece_set))
+        blue_piece_set.remove(piece)
+        wrong_piece_set.add(piece)
+        piece = random.choice(list(red_piece_set))
+        red_piece_set.remove(piece)
+        wrong_piece_set.add(piece)
+
+    correct_piece_set = blue_piece_set | red_piece_set
+    return [correct_piece_set, wrong_piece_set]
+
+
 # stateの駒の色に応じたii_stateを作成する(初期のstateのみ使用可能)
-def create_ii_state_from_state(state, enemy_view=False, through_num=0):
+def create_ii_state_from_state(
+    state, enemy_view=False, through_num=0, wrong_through_num=0
+):
     if enemy_view:
         # 敵視点でii_stateを作成
         pieces = state.enemy_pieces
@@ -406,13 +498,24 @@ def create_ii_state_from_state(state, enemy_view=False, through_num=0):
 
     if through_num == 0:
         ii_state = II_State(blue_piece_set, rev_enemy_blue_piece_set)
-    else:
+    elif wrong_through_num == 0:
         see_thorugh_id_set = create_see_through_piece(
             rev_enemy_blue_piece_set, through_num
         )
         ii_state = II_State(
             blue_piece_set, rev_enemy_blue_piece_set, see_thorugh_id_set
         )
+    else:
+        correct_wrong_piece_set = create_wrong_and_see_through_piece(
+            blue_piece_set, through_num, wrong_through_num
+        )
+        ii_state = II_State(
+            blue_piece_set,
+            rev_enemy_blue_piece_set,
+            correct_wrong_piece_set[0],
+            correct_wrong_piece_set[1],
+        )
+
     return ii_state
 
 
@@ -861,10 +964,59 @@ def shave_impossible_pattern(piece_ID: int, color_is_blue: bool, ii_state):
                 ii_state.my_estimated_num.remove(my_estimated_num)
 
 
+# 駒が死ぬたびに推測値を全て作り直して、死んだ駒と残った推測駒から新しい推測値を作成する
+def rebuilding_estimated_num(
+    ii_state, correct_estimate_piece: list, wrong_estimate_piece: list
+):
+    # 生きてる駒のリストにcorrect_estimate_pieceとwrong_estimate_pieceが存在するかを確認
+    # enemy_piece_list = [0, 1, 2, 3, 4, 5, 6, 7]
+    blue_pieces = []
+    red_pieces = []
+    for correct_piece in correct_estimate_piece:
+        if correct_piece in ii_state.enemy_piece_list:  # 生きてるか
+            if correct_piece in ii_state.real_enemy_piece_blue_set:  # 青駒かどうか
+                blue_pieces.append(correct_piece)
+            else:
+                red_pieces.append(correct_piece)
+
+    for wrong_piece in wrong_estimate_piece:
+        if wrong_piece in ii_state.enemy_piece_list:  # 生きてるか
+            if (
+                wrong_piece in ii_state.real_enemy_piece_blue_set
+            ):  # 青駒かどうか(wrongは間違った推測なので赤青を反転させる)
+                red_pieces.append(wrong_piece)
+            else:
+                blue_pieces.append(wrong_piece)
+
+    # このままだと駒数が溢れている(青駒が5個などあり得ない比率になっている)可能性があるので、その際にはランダムピックで削除
+    if len(blue_pieces) > ii_state.living_piece_color[0]:
+        while len(blue_pieces) > ii_state.living_piece_color[0]:
+            blue_pieces.remove(random.choice(blue_pieces))
+    if len(red_pieces) > ii_state.living_piece_color[1]:
+        while len(red_pieces) > ii_state.living_piece_color[1]:
+            red_pieces.remove(random.choice(red_pieces))
+
+    # 盤面の推測値を新たに作成
+    enemy_estimated_num = []
+    for enemy_blue in itertools.combinations(
+        set(ii_state.enemy_piece_list), ii_state.living_piece_color[0]
+    ):  # living_piece_color{敵青, 敵赤, 自青,　自赤}
+        enemy_estimated_num.append([0, enemy_blue])
+
+    # 推測値を更新
+    ii_state.enemy_estimated_num = enemy_estimated_num
+
+    # 推測の情報から状態を削減
+    for piece_id in blue_pieces:
+        shave_impossible_pattern(piece_id, True, ii_state)
+    for piece_id in red_pieces:
+        shave_impossible_pattern(piece_id, False, ii_state)
+
+
 # 駒の死亡処理
 # 既存のパターンから推測値を抜き出して新しい推測値を作成
 def reduce_pattern(dead_piece_ID: int, color_is_blue: bool, ii_state):
-    # 駒の色が確定するので、ありえないパターンを削げる
+    # 駒の色が確定するので、ありえないパターンを削ぐ
     shave_impossible_pattern(dead_piece_ID, color_is_blue, ii_state)
 
     # all_pieceから削除
@@ -1469,7 +1621,9 @@ if __name__ == "__main__":
     # model = load_model(str(path))
 
     # ii_state = II_State({8, 9, 10, 11}, {0, 1, 2, 3})
-    ii_state = II_State({8, 9, 10, 11}, {0, 1, 2, 3}, {2, 3, 4, 5})
+    # ii_state = II_State({8, 9, 10, 11}, {0, 1, 2, 3}, {2, 3, 4, 5})
+    ii_state = II_State({8, 9, 10, 11}, {0, 1, 2, 3}, {2, 3, 4}, {0, 1, 6})
+    print("本当の青駒：", ii_state.real_enemy_piece_blue_set)
     print("初期値：", ii_state.enemy_estimated_num)
     reduce_pattern(4, False, ii_state)
     print("4赤(透視済)：", ii_state.enemy_estimated_num)

@@ -540,58 +540,91 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
         rw_action = rand_world_action(ci_model_path)
         # ii_model_path = "ii_models/" + path + ".pth"
         # ii_handy_action = IIHandyAction(ii_model_path)
-        # ii_handy_action = IIHandyAction("models/20000.pth")
+        ii_handy_action = IIHandyAction("models/20000.pth")
 
-        buttle_num = 100
-        for _ in range(buttle_num):
-            state = State()
-            p0_ii_state = create_ii_state_from_state(state, False, 4)
-            p1_ii_state = create_ii_state_from_state(state, True, 4)
-            action_num = -1
+        buttle_num = 500
+        list_of_matches = []
+        # for i0 in range(8):
+        #     for i1 in range(8):
+        #         list_of_matches.append([i0, i1])
+        for i1 in range(8):
+            list_of_matches.append([8, 8])
+        print(list_of_matches)
+        wrong_list_of_matches = []
+        for i1 in range(8):
+            wrong_list_of_matches.append([0, i1 + 1])
+        print(wrong_list_of_matches)
 
-            # ゲーム終了までループ
-            while True:
-                if state.is_done():
-                    break
-                # p0のターン
-                if state.depth % 2 == 0:
-                    # action_num = ii_handy_action(state)  # 不完全情報でそのまま学習したエージェント
-                    # action_num = random_action(state)  # ランダム
-                    # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
-                    # action_num = handy_action(state)
-                    action_num = ii_state_action(
-                        rw_action, p0_ii_state, action_num
-                    )  # 推測なしのii_stateで行動決定
+        for see_through_num, wrong_see_through_num in zip(
+            list_of_matches, wrong_list_of_matches
+        ):
+            print("VS", see_through_num, wrong_see_through_num)
+            for _ in range(buttle_num):
+                state = State()
+                # p0_ii_state = create_ii_state_from_state(
+                #     state, False, see_through_num[0]
+                # )
+                # p1_ii_state = create_ii_state_from_state(
+                #     state, True, see_through_num[1]
+                # )
+                p0_ii_state = create_ii_state_from_state(
+                    state,
+                    False,
+                    see_through_num[0] - wrong_see_through_num[0],
+                    wrong_see_through_num[0],
+                )
+                p1_ii_state = create_ii_state_from_state(
+                    state,
+                    True,
+                    see_through_num[1] - wrong_see_through_num[1],
+                    wrong_see_through_num[1],
+                )
+                action_num = -1
 
-                    if action_num == 2 or action_num == 22:
-                        state.is_goal = True
-                        state.goal_player = 0
+                # ゲーム終了までループ
+                while True:
+                    if state.is_done():
                         break
-                    state = state.next(action_num)
-                # p1のターン
-                else:
-                    # action_num = random_action(state)  # ランダム
-                    # action_num = mcts_action(state) #透視MCTS
-                    # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
-                    action_num = ii_state_action(
-                        rw_action, p1_ii_state, action_num
-                    )  # 推測なしのii_stateで行動決定
+                    # p0のターン
+                    if state.depth % 2 == 0:
+                        # action_num = ii_handy_action(state)  # 不完全情報でそのまま学習したエージェント
+                        # action_num = random_action(state)  # ランダム
+                        # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+                        # action_num = handy_action(state)
+                        action_num = ii_state_action(
+                            rw_action, p0_ii_state, action_num
+                        )  # 推測なしのii_stateで行動決定
 
-                    if action_num == 2 or action_num == 22:
-                        # print("ゴール")
-                        state.is_goal = True
-                        state.goal_player = 1
-                        break
-                    state = state.next(action_num)
-            # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
-            state.winner_checker(win_player)
-            print(win_player)
-        print(
-            "結果:",
-            win_player[0],
-            win_player[1],
-            buttle_num - win_player[0] - win_player[1],
-        )
+                        if action_num == 2 or action_num == 22:
+                            state.is_goal = True
+                            state.goal_player = 0
+                            break
+                        state = state.next(action_num)
+                    # p1のターン
+                    else:
+                        # action_num = random_action(state)  # ランダム
+                        # action_num = mcts_action(state) #透視MCTS
+                        # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+                        action_num = ii_state_action(
+                            rw_action, p1_ii_state, action_num
+                        )  # 推測なしのii_stateで行動決定
+
+                        if action_num == 2 or action_num == 22:
+                            # print("ゴール")
+                            state.is_goal = True
+                            state.goal_player = 1
+                            break
+                        state = state.next(action_num)
+                # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
+                state.winner_checker(win_player)
+                # print(win_player)
+            print(
+                "result:",
+                win_player[0],
+                win_player[1],
+                buttle_num - win_player[0] - win_player[1],
+            )
+            win_player = [0, 0]
 
 
 def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
