@@ -537,8 +537,8 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
         print("models:", path)
         win_player = [0, 0]
         ci_model_path = "models/" + path + ".pth"
-        # rw_action = rand_world_action(ci_model_path)
-        rw_action = rand_n_world_action(ci_model_path, 4)
+        rw_action = rand_world_action(ci_model_path)
+        rw_n_action = rand_n_world_action(ci_model_path, 8)
         # ii_model_path = "ii_models/" + path + ".pth"
         # ii_handy_action = IIHandyAction(ii_model_path)
         ii_handy_action = IIHandyAction("models/20000.pth")
@@ -549,11 +549,11 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
         #     for i1 in range(8):
         #         list_of_matches.append([i0, i1])
         for i1 in range(8):
-            list_of_matches.append([8, 8])
+            list_of_matches.append([i1, i1])
         print(list_of_matches)
         wrong_list_of_matches = []
         for i1 in range(8):
-            wrong_list_of_matches.append([0, i1 + 1])
+            wrong_list_of_matches.append([0, 0])
         print(wrong_list_of_matches)
 
         for see_through_num, wrong_see_through_num in zip(
@@ -607,7 +607,7 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
                         # action_num = mcts_action(state) #透視MCTS
                         # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
                         action_num = ii_state_action(
-                            rw_action, p1_ii_state, action_num
+                            rw_n_action, p1_ii_state, action_num
                         )  # 推測なしのii_stateで行動決定
 
                         if action_num == 2 or action_num == 22:
@@ -636,13 +636,14 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
         print("models:", path)
         # ii_model_path = "ii_models/" + path + ".pth"
         # ii_handy_action = IIHandyAction(ii_model_path)
+        ii_handy_action = IIHandyAction("ii_models/20000.pth")
         ci_model_path = "models/" + path + ".pth"
 
         drow_count = 0
         win_player = [0, 0]
 
         # print("start compete : (path) " + path)
-        for _ in range(100):
+        for _ in range(1000):
             # 直前の行動を保管
             just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
 
@@ -656,32 +657,30 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
             while True:
                 # print(state)
                 if state.is_done():
-                    print("ゲーム終了:ターン数", state.depth)
-                    if state.print_is_lose():
-                        if state.depth % 2 == 0:
-                            print("敗北")
-                        else:
-                            print("勝利or引き分け")
-                    else:
-                        if state.depth % 2 == 1:
-                            print("勝利or引き分け")
-                        else:
-                            print("敗北")
+                    # print("ゲーム終了:ターン数", state.depth)
+                    # if state.print_is_lose():
+                    #     if state.depth % 2 == 0:
+                    #         print("敗北")
+                    #     else:
+                    #         print("勝利or引き分け")
+                    # else:
+                    #     if state.depth % 2 == 1:
+                    #         print("勝利or引き分け")
+                    #     else:
+                    #         print("敗北")
                     break
 
                 # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
                 if state.depth % 2 == 0:
                     # 不完全情報でそのまま学習したエージェント
-                    # just_before_action_num = ii_handy_action(
-                    #     state
-                    # )
+                    just_before_action_num = ii_handy_action(state)
 
                     # just_before_action_num = random_action(state)  # ランダム
-                    just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+                    # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
                     # just_before_action_num = handy_action(state)
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
-                        print("先手ゴール")
+                        # print("先手ゴール")
                         state.is_goal = True
                         state.goal_player = 0
                         break
@@ -696,7 +695,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                     # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
-                        print("後手ゴール", just_before_action_num)
+                        # print("後手ゴール", just_before_action_num)
                         state.is_goal = True
                         state.goal_player = 1
                         break
@@ -712,15 +711,25 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
 if __name__ == "__main__":
     # evaluate_GeisterLog()
     # path_list = ["1", "3000", "5000", "10000"]
-    path_list = ["40000"]
+    path_list = ["60000"]
 
     # path_list = []
     # for num in range(1, 44):
     #     path_list.append(str(num * 4000))
 
-    # print("gamma:0.9")
-    # evaluate_HandyGeister(path_list, 0.9)
-    # print("gamma:1.0")
-    # evaluate_HandyGeister(path_list, 1.0)
-    evaluate_shave_impossible_board(path_list)
+    # print("gamma:0.6")
+    # evaluate_HandyGeister(path_list, 0.6)
+    # print("gamma:0.8")
+    # evaluate_HandyGeister(path_list, 0.8)
+    print("gamma:0.85")
+    evaluate_HandyGeister(path_list, 0.85)
+    print("gamma:0.9")
+    evaluate_HandyGeister(path_list, 0.9)
+    print("gamma:0.95")
+    evaluate_HandyGeister(path_list, 0.95)
+    print("gamma:1.0")
+    evaluate_HandyGeister(path_list, 1.0)
+
+    # 最新のやつ
+    # evaluate_shave_impossible_board(path_list)
 
