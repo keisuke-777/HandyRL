@@ -383,7 +383,7 @@ def mcts_action(state):
     root_node.expand()
 
     # ルートノードを評価 (rangeを変化させると評価回数を変化させられる)
-    for _ in range(100):
+    for _ in range(300):
         root_node.evaluate()
 
     # 試行回数の最大値を持つ行動を返す
@@ -643,7 +643,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
         win_player = [0, 0]
 
         # print("start compete : (path) " + path)
-        for _ in range(1000):
+        for _ in range(100):
             # 直前の行動を保管
             just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
 
@@ -673,10 +673,10 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
                 # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
                 if state.depth % 2 == 0:
                     # 不完全情報でそのまま学習したエージェント
-                    just_before_action_num = ii_handy_action(state)
+                    # just_before_action_num = ii_handy_action(state)
 
                     # just_before_action_num = random_action(state)  # ランダム
-                    # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+                    just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
                     # just_before_action_num = handy_action(state)
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
@@ -707,6 +707,80 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
         print("結果:", win_player)
 
 
+def csv_evalRL(path_list=["latest"], gamma=0.9):
+    from test import HandyAction
+
+    buttle_num = 1000
+    global drow_count
+    for path in path_list:
+        # ii_model_path = "ii_models/" + path + ".pth"
+        # ii_handy_action = IIHandyAction(ii_model_path)
+        ii_handy_action = IIHandyAction("ii_models/20000.pth")
+        ci_model_path = "models/" + path + ".pth"
+
+        drow_count = 0
+        win_player = [0, 0]
+
+        # print("start compete : (path) " + path)
+        for _ in range(buttle_num):
+            win_player = [0, 0]
+            # 直前の行動を保管
+            just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
+
+            # 状態の生成
+            state = State()
+            ii_state = create_ii_state_from_state(state, True)
+            handy_action = HandyAction(ci_model_path)  # 完全情報ガイスター
+
+            # ゲーム終了までループ
+            while True:
+                if state.is_done():
+                    break
+
+                # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
+                if state.depth % 2 == 0:
+                    # 不完全情報でそのまま学習したエージェント
+                    just_before_action_num = ii_handy_action(state)
+
+                    # just_before_action_num = random_action(state)  # ランダム
+                    # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+
+                    if just_before_action_num == 2 or just_before_action_num == 22:
+                        state.is_goal = True
+                        state.goal_player = 0
+                        break
+                    state = state.next(just_before_action_num)
+                else:
+                    # 推測+完全情報の方策を用いた行動決定
+                    just_before_action_num = ci_pridict_action(
+                        ii_state, just_before_action_num, ci_model_path, gamma
+                    )
+
+                    # just_before_action_num = random_action(state)  # ランダム
+                    # just_before_action_num = mcts_action(state) #透視MCTS
+                    # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+
+                    if just_before_action_num == 2 or just_before_action_num == 22:
+                        state.is_goal = True
+                        state.goal_player = 1
+                        break
+                    state = state.next(just_before_action_num)
+            state.winner_checker(win_player)
+            # print(win_player)
+        drow = buttle_num - win_player[0] - win_player[1]
+        half_drow = drow / 2.0
+        # モデルの値, 引き分け含めた先手勝ち,　引き分け含めた後手勝ち, 先手勝ち, 後手勝ち, 引き分け
+        print(
+            path,
+            win_player[0] + half_drow,
+            win_player[1] + half_drow,
+            win_player[0],
+            win_player[1],
+            drow,
+            sep=",",
+        )
+
+
 # 動作確認
 if __name__ == "__main__":
     # evaluate_GeisterLog()
@@ -721,15 +795,27 @@ if __name__ == "__main__":
     # evaluate_HandyGeister(path_list, 0.6)
     # print("gamma:0.8")
     # evaluate_HandyGeister(path_list, 0.8)
-    print("gamma:0.85")
-    evaluate_HandyGeister(path_list, 0.85)
+    # print("gamma:0.85")
+    # evaluate_HandyGeister(path_list, 0.85)
     print("gamma:0.9")
     evaluate_HandyGeister(path_list, 0.9)
-    print("gamma:0.95")
-    evaluate_HandyGeister(path_list, 0.95)
-    print("gamma:1.0")
-    evaluate_HandyGeister(path_list, 1.0)
+    # print("gamma:0.95")
+    # evaluate_HandyGeister(path_list, 0.95)
+    # print("gamma:1.0")
+    # evaluate_HandyGeister(path_list, 1.0)
 
     # 最新のやつ
     # evaluate_shave_impossible_board(path_list)
+
+    # 検証用
+    # path_list = []
+    # for num in range(1, 50):
+    #     path_list.append(str(num * 1000))
+
+    # とるデータ(MCTSの深さ適度に強くて時間かからんやつにする)
+    # ランダムvs提案手法
+    # MCTSvs提案手法
+    # ランダムvs不完全情報
+    # MCTSvs不完全情報
+    csv_evalRL(path_list, 0.9)
 
