@@ -1,6 +1,9 @@
 import random
 import math
 
+MCTS_RANGE = 300
+DROW_TURN = 300
+
 # ゲームの状態
 class State:
     # 初期化
@@ -70,19 +73,22 @@ class State:
     # プリントする用途のis_lose
     def print_is_lose(self):
         if not any(elem == 1 for elem in self.pieces):  # 自分の青駒が存在しないなら負け
-            print("青喰い")
+            print("青駒の全滅")
+            self.print_result()
             return True
         if not any(elem == 2 for elem in self.enemy_pieces):  # 敵の赤駒が存在しない(全部取っちゃった)なら負け
-            print("赤喰い")
+            print("赤駒の全滅")
+            self.print_result()
             return True
         if self.is_goal:
             print("ゴール")
+            self.print_result()
             return True
         return False
 
     # 引き分けかどうか
     def is_draw(self):
-        return self.depth >= 150  # 300手
+        return self.depth >= DROW_TURN
 
     # ゲーム終了かどうか
     def is_done(self):
@@ -226,10 +232,36 @@ class State:
         else:
             pass
 
+    def print_result(self):
+        # 1つのボードに味方の駒と敵の駒を集める
+        board = [0] * 36
+        if self.depth % 2 == 0:
+            my_p = self.pieces.copy()
+            rev_ep = list(reversed(self.enemy_pieces))
+            for i in range(36):
+                board[i] = my_p[i] - rev_ep[i]
+        else:
+            my_p = list(reversed(self.pieces))
+            rev_ep = self.enemy_pieces.copy()
+            for i in range(36):
+                board[i] = rev_ep[i] - my_p[i]
+
+        blue_place = []
+        red_place = []
+
+        for index, i in enumerate(board):
+            if i == -1:
+                blue_place.append(str(index))  # 青
+            elif i == -2:
+                red_place.append(str(index))  # 赤
+
+        print("敵の青駒(💙)の最終位置：" + ", ".join(blue_place))
+        print("敵の赤駒(❤️ )の最終位置：" + ", ".join(red_place))
+
     # 文字列表示
     def __str__(self):
-        row = "|{}|{}|{}|{}|{}|{}|"
-        hr = "\n-------------------------------\n"
+        row = "     |{}|{}|{}|{}|{}|{}|"
+        hr = "\n     -------------------\n"
 
         # 1つのボードに味方の駒と敵の駒を集める
         board = [0] * 36
@@ -245,22 +277,50 @@ class State:
                 board[i] = rev_ep[i] - my_p[i]
 
         board_essence = []
-        for i in board:
+        blue_count = 0
+        red_count = 0
+        for index, i in enumerate(board):
             if i == 1:
-                board_essence.append("自青")
+                board_essence.append("💙")
             elif i == 2:
-                board_essence.append("自赤")
+                board_essence.append("❤️ ")
             elif i == -1:
-                board_essence.append("敵青")
+                board_essence.append("👻")  # 青
+                blue_count += 1
             elif i == -2:
-                board_essence.append("敵赤")
+                board_essence.append("👻")  # 赤
+                red_count += 1
             else:
-                board_essence.append("　　")
+                str_num = str(index)
+                if index < 10:
+                    str_num = " " + str_num
+                board_essence.append(str_num)
 
-        str = (
-            hr + row + hr + row + hr + row + hr + row + hr + row + hr + row + hr
+        status = (
+            "\n 敵の駒数：青駒(💙)->"
+            + str(blue_count)
+            + "個, 赤駒(❤️ )->"
+            + str(red_count)
+            + "個\n"
+        )
+
+        return_str = (
+            hr
+            + row
+            + hr
+            + row
+            + hr
+            + row
+            + hr
+            + row
+            + hr
+            + row
+            + hr
+            + row
+            + hr
+            + status
         ).format(*board_essence)
-        return str
+        return return_str
 
 
 # ランダムで行動選択
@@ -383,7 +443,7 @@ def mcts_action(state):
     root_node.expand()
 
     # ルートノードを評価 (rangeを変化させると評価回数を変化させられる)
-    for _ in range(300):
+    for _ in range(MCTS_RANGE):
         root_node.evaluate()
 
     # 試行回数の最大値を持つ行動を返す
@@ -436,88 +496,50 @@ def no_cheat_mcts_action(state):
     return mcts_action(return_random_shuffle_state(state))
 
 
-# どれほど正確に推論できているかどうかを計測する
-# 正常に動作しません
-def measure_estimate_accuracy(ii_state, state, csvWriter=None):
-    # if state.depth % 10 != 0:
-    #     return
-    estimate_value = ii_state.return_estimate_value()
-    real_blue_piece = list(
-        ii_state.real_enemy_piece_blue_set
-    )  # 0~4の青駒のインデックスを格納 ex)(1, 2, 3, 4)
+# 人間に行動を選択させる
+def human_player_action(state):
+    # 盤面を表示
+    print(state)
 
-    # 死んでいる敵駒の数(種類が確定している敵駒の数)
-    dead_enemy_piece_num = (
-        8 - ii_state.living_piece_color[0] - ii_state.living_piece_color[1]
-    )
-    dead_enemy_blue_piece_num = 4 - ii_state.living_piece_color[0]
+    # 入力を待つ(受ける)
+    before_move_place = int(input("Please enter to move piece (左上~右下にかけて0~35) : "))
+    direction = int(input("direction (下0 左1 上2 右3) : "))
+    move = state.position_to_action(before_move_place, direction)
 
-    # estimate_valueの上位二つのインデックスを取得 array([n])でとってくるのでケツに[0][0]つける
-    top_four = [
-        np.where(estimate_value == np.sort(estimate_value)[-1]),
-        np.where(estimate_value == np.sort(estimate_value)[-2]),
-        np.where(estimate_value == np.sort(estimate_value)[-3]),
-        np.where(estimate_value == np.sort(estimate_value)[-4]),
-    ]
-    # real_blue_pieceといくつ一致しているかを確認(最大4)
-    number_of_matches = 0
-    if (
-        real_blue_piece[0] == top_four[0][0][0]
-        or real_blue_piece[0] == top_four[1][0][0]
-        or real_blue_piece[0] == top_four[2][0][0]
-        or real_blue_piece[0] == top_four[3][0][0]
-    ):
-        number_of_matches += 1
-    if (
-        real_blue_piece[1] == top_four[0][0][0]
-        or real_blue_piece[1] == top_four[1][0][0]
-        or real_blue_piece[1] == top_four[2][0][0]
-        or real_blue_piece[1] == top_four[3][0][0]
-    ):
-        number_of_matches += 1
-    if (
-        real_blue_piece[2] == top_four[0][0][0]
-        or real_blue_piece[2] == top_four[1][0][0]
-        or real_blue_piece[2] == top_four[2][0][0]
-        or real_blue_piece[2] == top_four[3][0][0]
-    ):
-        number_of_matches += 1
-    if (
-        real_blue_piece[3] == top_four[0][0][0]
-        or real_blue_piece[3] == top_four[1][0][0]
-        or real_blue_piece[3] == top_four[2][0][0]
-        or real_blue_piece[3] == top_four[3][0][0]
-    ):
-        number_of_matches += 1
+    # 合法手か確認
+    legal_actions = state.legal_actions()
+    if any(elem == move for elem in legal_actions):
+        return move
 
-    # 一致度合いを計測
-    degree_of_match = float(0)
-    for index, est_val in enumerate(estimate_value):
-        if (
-            index == real_blue_piece[0]
-            or index == real_blue_piece[1]
-            or index == real_blue_piece[2]
-            or index == real_blue_piece[3]
-        ):
-            # 実際の駒の色が青だった場合
-            degree_of_match += est_val - 0.5
-        else:
-            # 実際の駒の色が赤だった場合
-            degree_of_match += 0.5 - est_val
-    # degree_of_match /= 2
+    # エラー処理(デバッグでしか使わんから適当)
+    print("非合法手が選択された為、ランダムに行動しました")
+    return legal_actions[random.randint(0, len(legal_actions) - 1)]
 
-    if True:
-        print("敵の青駒のインデックス", real_blue_piece)
-        print("ターン数", "上位4駒の一致数", "一致度", "敵の死駒数", "敵の青の死駒数", "推測値", sep=",")
-        print(
-            state.depth,
-            number_of_matches,
-            degree_of_match,
-            dead_enemy_piece_num,
-            dead_enemy_blue_piece_num,
-            estimate_value,
-            sep=",",
-        )
+
+def measure_estimate_accuracy(ii_state, csvWriter=None):
+    # 駒が死んだ際の処理を入れる
+
+    piece = [0] * 8  # 敵の駒のリスト 駒ごとの推測値を格納
+    # 全ての推測値に対して、推測値*青色かどうか（1,0）を計算し、駒ごとの推測値を計算
+    for est in ii_state.enemy_estimated_num:
+        red_piece_set = set([0, 1, 2, 3, 4, 5, 6, 7]) - set(est[1])
+        for blue_est_index in est[1]:
+            piece[blue_est_index] += est[0]
+        for red_est_index in red_piece_set:
+            piece[red_est_index] -= est[0]
+
+    # 実際の駒の色とどれだけ一致しているかを確認
+    # 評価案1：推測値が高い順の4駒を青駒とした場合に、実際の駒色といくつ一致しているか
+    np_piece = np.array(piece)
+    top_four_index = np.split(np_piece.argsort()[::-1], 2)[0]
+    value = 0
+    for est_blue in top_four_index:
+        if est_blue in ii_state.real_enemy_piece_blue_set:
+            value += 0.25
+    print(value)
+
+    print(sum(piece))
+    print(piece)
 
 
 # 推測+完全情報の方策を用いた行動決定
@@ -563,22 +585,22 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
             for _ in range(buttle_num):
                 state = State()
                 # p0_ii_state = create_ii_state_from_state(
-                #     state, False, see_through_num[0]
+                #     state, enemy_view=False, see_through_num[0]
                 # )
                 # p1_ii_state = create_ii_state_from_state(
-                #     state, True, see_through_num[1]
+                #     state, enemy_view=True, see_through_num[1]
                 # )
                 p0_ii_state = create_ii_state_from_state(
                     state,
-                    False,
-                    see_through_num[0] - wrong_see_through_num[0],
-                    wrong_see_through_num[0],
+                    enemy_view=False,
+                    through_num=see_through_num[0] - wrong_see_through_num[0],
+                    wrong_through_num=wrong_see_through_num[0],
                 )
                 p1_ii_state = create_ii_state_from_state(
                     state,
-                    True,
-                    see_through_num[1] - wrong_see_through_num[1],
-                    wrong_see_through_num[1],
+                    enemy_view=True,
+                    through_num=see_through_num[1] - wrong_see_through_num[1],
+                    wrong_through_num=wrong_see_through_num[1],
                 )
                 action_num = -1
 
@@ -594,7 +616,7 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
                         # action_num = handy_action(state)
                         action_num = ii_state_action(
                             rw_action, p0_ii_state, action_num
-                        )  # 推測なしのii_stateで行動決定
+                        )  # ii_stateからrw_actionを用いて行動決定（ii_stateの更新もする。推測値は操作しない。）
 
                         if action_num == 2 or action_num == 22:
                             state.is_goal = True
@@ -608,7 +630,7 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
                         # action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
                         action_num = ii_state_action(
                             rw_n_action, p1_ii_state, action_num
-                        )  # 推測なしのii_stateで行動決定
+                        )  # ii_stateからrw_n_actionを用いて行動決定（ii_stateの更新もする。推測値は操作しない。）
 
                         if action_num == 2 or action_num == 22:
                             # print("ゴール")
@@ -628,46 +650,116 @@ def evaluate_shave_impossible_board(path_list=["latest"]):
             win_player = [0, 0]
 
 
-def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
+def evaluate_human(path="latest", gamma=0.9):
+    from test import HandyAction
+    from GuessEnemyPiece import ii_state_action, rand_n_world_action
+
+    ci_model_path = "models/" + path + ".pth"
+    # ii_model_path = "ii_models/" + path + ".pth"
+    # ii_handy_action = IIHandyAction(ii_model_path)
+    ii_handy_action = IIHandyAction("ii_models/20000.pth")
+    # ci_model_path = "models/" + path + ".pth"
+    # 直前の行動を保管
+    just_before_action_num = -1
+
+    # 状態の生成
+    state = State()
+    ii_state = create_ii_state_from_state(state, enemy_view=True)
+    ii_state_see_through = create_ii_state_from_state(
+        state, enemy_view=True, through_num=8, wrong_through_num=0
+    )
+    ii_state_see_through_test = create_ii_state_from_state(
+        state, enemy_view=False, through_num=8, wrong_through_num=0
+    )
+    rw_n_action = rand_n_world_action(ci_model_path, 1)
+    handy_action = HandyAction(ci_model_path)  # 完全情報ガイスター
+
+    # ゲーム終了までループ
+    while True:
+        # print(state)
+        if state.is_done():
+            print("ゲーム終了:ターン数", state.depth)
+            if state.print_is_lose():
+                if state.depth % 2 == 0:
+                    print("敗北")
+                else:
+                    print("勝利")
+            else:
+                if state.depth % 2 == 1:
+                    print("勝利")
+                else:
+                    print("敗北")
+            break
+        if state.depth % 2 == 0:
+            just_before_action_num = human_player_action(state)
+            # just_before_action_num = ii_state_action(
+            #     rw_n_action, ii_state_see_through_test, just_before_action_num
+            # ) # 透視完全情報RL
+
+            if just_before_action_num == 2 or just_before_action_num == 22:
+                state.is_goal = True
+                state.goal_player = 0
+                state.print_is_lose()
+                break
+            state = state.next(just_before_action_num)
+
+        else:
+            # 推測+完全情報の方策を用いた行動決定
+            # just_before_action_num = ci_pridict_action(
+            #     ii_state, just_before_action_num, ci_model_path, gamma
+            # )
+
+            # 推測のやつ
+            # measure_estimate_accuracy(ii_state)
+
+            # just_before_action_num = random_action(state)  # ランダム
+            # just_before_action_num = mcts_action(state) #透視MCTS
+            # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+
+            just_before_action_num = ii_state_action(
+                rw_n_action, ii_state_see_through, just_before_action_num
+            )  # 透視完全情報RL
+
+            # 不完全情報でそのまま学習したエージェント
+            # just_before_action_num = ii_handy_action(state)
+
+            if just_before_action_num == 2 or just_before_action_num == 22:
+                state.is_goal = True
+                state.goal_player = 1
+                state.print_is_lose()
+                break
+            state = state.next(just_before_action_num)
+
+
+def csv_evalRL(path_list=["40000"], gamma=0.9):
     from test import HandyAction
 
+    print(path_list)
+    print("モデルの値, 引き分け含めた先手勝ち,　引き分け含めた後手勝ち, 先手勝ち, 後手勝ち, 引き分け")
+    buttle_num = 100
     global drow_count
     for path in path_list:
-        print("models:", path)
-        # ii_model_path = "ii_models/" + path + ".pth"
+        ii_model_path = "ii_models/" + path + ".pth"
         # ii_handy_action = IIHandyAction(ii_model_path)
-        ii_handy_action = IIHandyAction("ii_models/20000.pth")
+        ii_handy_action = IIHandyAction("ii_models/40000.pth")
         ci_model_path = "models/" + path + ".pth"
 
         drow_count = 0
         win_player = [0, 0]
 
         # print("start compete : (path) " + path)
-        for _ in range(100):
+        for _ in range(buttle_num):
             # 直前の行動を保管
             just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
 
             # 状態の生成
             state = State()
-            ii_state = create_ii_state_from_state(state, True)
-
+            ii_state = create_ii_state_from_state(state, enemy_view=True)
             handy_action = HandyAction(ci_model_path)  # 完全情報ガイスター
 
             # ゲーム終了までループ
             while True:
-                # print(state)
                 if state.is_done():
-                    # print("ゲーム終了:ターン数", state.depth)
-                    # if state.print_is_lose():
-                    #     if state.depth % 2 == 0:
-                    #         print("敗北")
-                    #     else:
-                    #         print("勝利or引き分け")
-                    # else:
-                    #     if state.depth % 2 == 1:
-                    #         print("勝利or引き分け")
-                    #     else:
-                    #         print("敗北")
                     break
 
                 # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
@@ -677,73 +769,7 @@ def evaluate_HandyGeister(path_list=["latest"], gamma=0.9):
 
                     # just_before_action_num = random_action(state)  # ランダム
                     just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
-                    # just_before_action_num = handy_action(state)
-
-                    if just_before_action_num == 2 or just_before_action_num == 22:
-                        # print("先手ゴール")
-                        state.is_goal = True
-                        state.goal_player = 0
-                        break
-                    state = state.next(just_before_action_num)
-                else:
-                    # 推測+完全情報の方策を用いた行動決定
-                    just_before_action_num = ci_pridict_action(
-                        ii_state, just_before_action_num, ci_model_path, gamma
-                    )
-                    # just_before_action_num = random_action(state)  # ランダム
-                    # just_before_action_num = mcts_action(state) #透視MCTS
-                    # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
-
-                    if just_before_action_num == 2 or just_before_action_num == 22:
-                        # print("後手ゴール", just_before_action_num)
-                        state.is_goal = True
-                        state.goal_player = 1
-                        break
-                    # measure_estimate_accuracy(ii_state, state)
-                    state = state.next(just_before_action_num)
-            # [先手の勝利数(検証相手), 後手の勝利数(推測するエージェント)]
-            state.winner_checker(win_player)
-            print(win_player)
-        print("結果:", win_player)
-
-
-def csv_evalRL(path_list=["latest"], gamma=0.9):
-    from test import HandyAction
-
-    buttle_num = 1000
-    global drow_count
-    for path in path_list:
-        # ii_model_path = "ii_models/" + path + ".pth"
-        # ii_handy_action = IIHandyAction(ii_model_path)
-        ii_handy_action = IIHandyAction("ii_models/20000.pth")
-        ci_model_path = "models/" + path + ".pth"
-
-        drow_count = 0
-        win_player = [0, 0]
-
-        # print("start compete : (path) " + path)
-        for _ in range(buttle_num):
-            win_player = [0, 0]
-            # 直前の行動を保管
-            just_before_action_num = 123  # 30左で初期値に戻った設定(先手検証用)
-
-            # 状態の生成
-            state = State()
-            ii_state = create_ii_state_from_state(state, True)
-            handy_action = HandyAction(ci_model_path)  # 完全情報ガイスター
-
-            # ゲーム終了までループ
-            while True:
-                if state.is_done():
-                    break
-
-                # 次の状態の取得(ここも可読性下げすぎなので修正すべき)
-                if state.depth % 2 == 0:
-                    # 不完全情報でそのまま学習したエージェント
-                    just_before_action_num = ii_handy_action(state)
-
-                    # just_before_action_num = random_action(state)  # ランダム
-                    # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
+                    # just_before_action_num = mcts_action(state)  # 透視MCTS
 
                     if just_before_action_num == 2 or just_before_action_num == 22:
                         state.is_goal = True
@@ -752,11 +778,13 @@ def csv_evalRL(path_list=["latest"], gamma=0.9):
                     state = state.next(just_before_action_num)
                 else:
                     # 推測+完全情報の方策を用いた行動決定
-                    just_before_action_num = ci_pridict_action(
-                        ii_state, just_before_action_num, ci_model_path, gamma
-                    )
+                    # just_before_action_num = ci_pridict_action(
+                    #     ii_state, just_before_action_num, ci_model_path, gamma
+                    # )
 
-                    # just_before_action_num = random_action(state)  # ランダム
+                    # just_before_action_num = ii_handy_action(state)  # 不完全情報でそのまま学習
+                    just_before_action_num = random_action(state)  # ランダム
+                    # just_before_action_num = handy_action(state)  # 完全情報ガイスター
                     # just_before_action_num = mcts_action(state) #透視MCTS
                     # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
 
@@ -783,9 +811,15 @@ def csv_evalRL(path_list=["latest"], gamma=0.9):
 
 # 動作確認
 if __name__ == "__main__":
+    # path_list = ["10000", "20000", "30000", "40000"]
+    # csv_evalRL(path_list)
+
+    path = "108000"
+    evaluate_human(path)
+
     # evaluate_GeisterLog()
     # path_list = ["1", "3000", "5000", "10000"]
-    path_list = ["60000"]
+    # path_list = ["60000"]
 
     # path_list = []
     # for num in range(1, 44):
@@ -797,8 +831,8 @@ if __name__ == "__main__":
     # evaluate_HandyGeister(path_list, 0.8)
     # print("gamma:0.85")
     # evaluate_HandyGeister(path_list, 0.85)
-    print("gamma:0.9")
-    evaluate_HandyGeister(path_list, 0.9)
+    # print("gamma:0.9")
+    # evaluate_HandyGeister(path_list, 0.9)
     # print("gamma:0.95")
     # evaluate_HandyGeister(path_list, 0.95)
     # print("gamma:1.0")
@@ -807,15 +841,18 @@ if __name__ == "__main__":
     # 最新のやつ
     # evaluate_shave_impossible_board(path_list)
 
-    # 検証用
+    # evaluate_human(path="108000")
+
+    # # 検証用
     # path_list = []
+    # # path_list.append("40000")
     # for num in range(1, 50):
     #     path_list.append(str(num * 1000))
 
-    # とるデータ(MCTSの深さ適度に強くて時間かからんやつにする)
-    # ランダムvs提案手法
-    # MCTSvs提案手法
-    # ランダムvs不完全情報
-    # MCTSvs不完全情報
-    csv_evalRL(path_list, 0.9)
+    # # とるデータ(MCTSの深さ適度に強くて時間かからんやつにする)
+    # # ランダムvs提案手法
+    # # MCTSvs提案手法
+    # # ランダムvs不完全情報
+    # # MCTSvs不完全情報
+    # csv_evalRL(path_list, 0.85)
 

@@ -62,7 +62,8 @@ def evaluate_best_player():
     # HandyRLの方策を短絡的に選択するエージェント
     from test import HandyAction
 
-    handy_action = HandyAction("models/40000.pth")
+    # handy_action = HandyAction("models/40000.pth")
+
     # from test import IIHandyAction
     # handy_action = IIHandyAction("ii_models/10000.pth")
 
@@ -76,8 +77,8 @@ def evaluate_best_player():
     # evaluate_algorithm_of("VS_Random", next_actions)
 
     # # VSモンテカルロ木探索
-    next_actions = (handy_action, mcts_action)
-    evaluate_algorithm_of("VS_MCTS", next_actions)
+    # next_actions = (handy_action, mcts_action)
+    # evaluate_algorithm_of("VS_MCTS", next_actions)
 
     # # VSモデルを変更して比較するHandyRL
     # handy_action_two = HandyAction("ii_models/20000.pth")
@@ -98,6 +99,13 @@ def evaluate_best_player():
     # 自己対戦
     # next_actions = (next_pv_mcts_action, first_next_pv_mcts_action)
     # evaluate_algorithm_of("VS_過去の自分", next_actions)
+
+    for i in range(15):
+        path = "models/" + str(i * 5000 + 5000) + ".pth"
+        handy_action = HandyAction(path)
+        print(path)
+        next_actions = (handy_action, mcts_action)
+        evaluate_algorithm_of("VS_MCTS", next_actions)
 
 
 # 動作確認
