@@ -933,7 +933,8 @@ def update_predict_num_normalize(
         bf_est_num -= np.amin(bf_est_num)
     # 最小値0、合計1に正規化する
     for bf_est_num in bf_estimated_num:
-        bf_est_num /= np.sum(bf_est_num)
+        if np.sum(bf_est_num) > 0.0:  # 0除算対策(合計0の場合はそのまま扱う)
+            bf_est_num /= np.sum(bf_est_num)
 
     for index, en_est_num in enumerate(ii_state.enemy_estimated_num):
         action_value = bf_estimated_num[index][enemy_action_index]

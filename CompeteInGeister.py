@@ -4,6 +4,9 @@ import math
 MCTS_RANGE = 300
 DROW_TURN = 300
 
+# この大きな数を無限大として扱う
+INF = 99999
+
 # ゲームの状態
 class State:
     # 初期化
@@ -516,32 +519,6 @@ def human_player_action(state):
     return legal_actions[random.randint(0, len(legal_actions) - 1)]
 
 
-def measure_estimate_accuracy(ii_state, csvWriter=None):
-    # 駒が死んだ際の処理を入れる
-
-    piece = [0] * 8  # 敵の駒のリスト 駒ごとの推測値を格納
-    # 全ての推測値に対して、推測値*青色かどうか（1,0）を計算し、駒ごとの推測値を計算
-    for est in ii_state.enemy_estimated_num:
-        red_piece_set = set([0, 1, 2, 3, 4, 5, 6, 7]) - set(est[1])
-        for blue_est_index in est[1]:
-            piece[blue_est_index] += est[0]
-        for red_est_index in red_piece_set:
-            piece[red_est_index] -= est[0]
-
-    # 実際の駒の色とどれだけ一致しているかを確認
-    # 評価案1：推測値が高い順の4駒を青駒とした場合に、実際の駒色といくつ一致しているか
-    np_piece = np.array(piece)
-    top_four_index = np.split(np_piece.argsort()[::-1], 2)[0]
-    value = 0
-    for est_blue in top_four_index:
-        if est_blue in ii_state.real_enemy_piece_blue_set:
-            value += 0.25
-    print(value)
-
-    print(sum(piece))
-    print(piece)
-
-
 # 推測+完全情報の方策を用いた行動決定
 def ci_pridict_action(ii_state, just_before_action_num, model_path, gamma):
     just_before_enemy_action_num = just_before_action_num
@@ -681,21 +658,22 @@ def evaluate_human(path="latest", gamma=0.9):
             print("ゲーム終了:ターン数", state.depth)
             if state.print_is_lose():
                 if state.depth % 2 == 0:
-                    print("敗北")
+                    print("後手勝ち")
                 else:
-                    print("勝利")
+                    print("先手勝ち")
             else:
                 if state.depth % 2 == 1:
-                    print("勝利")
+                    print("先手勝ち")
                 else:
-                    print("敗北")
+                    print("後手勝ち")
             break
         if state.depth % 2 == 0:
-            just_before_action_num = human_player_action(state)
+            # just_before_action_num = human_player_action(state)
             # just_before_action_num = ii_state_action(
             #     rw_n_action, ii_state_see_through_test, just_before_action_num
-            # ) # 透視完全情報RL
-
+            # )  # 透視完全情報RL
+            # just_before_action_num = random_action(state)  # ランダム
+            just_before_action_num = mcts_action(state)  # 透視MCTS
             if just_before_action_num == 2 or just_before_action_num == 22:
                 state.is_goal = True
                 state.goal_player = 0
@@ -705,20 +683,17 @@ def evaluate_human(path="latest", gamma=0.9):
 
         else:
             # 推測+完全情報の方策を用いた行動決定
-            # just_before_action_num = ci_pridict_action(
-            #     ii_state, just_before_action_num, ci_model_path, gamma
-            # )
-
-            # 推測のやつ
-            # measure_estimate_accuracy(ii_state)
+            just_before_action_num = ci_pridict_action(
+                ii_state, just_before_action_num, ci_model_path, gamma
+            )
 
             # just_before_action_num = random_action(state)  # ランダム
             # just_before_action_num = mcts_action(state) #透視MCTS
             # just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
 
-            just_before_action_num = ii_state_action(
-                rw_n_action, ii_state_see_through, just_before_action_num
-            )  # 透視完全情報RL
+            # just_before_action_num = ii_state_action(
+            #     rw_n_action, ii_state_see_through, just_before_action_num
+            # )  # 透視完全情報RL
 
             # 不完全情報でそのまま学習したエージェント
             # just_before_action_num = ii_handy_action(state)
@@ -729,6 +704,144 @@ def evaluate_human(path="latest", gamma=0.9):
                 state.print_is_lose()
                 break
             state = state.next(just_before_action_num)
+
+
+# 推測の正確さを観測
+# csvArrayは8*300*3のサイズを想定しています
+# csvArray = [[[0] * 3 for i in range(300)] for j in range(8)]
+def measure_estimate_accuracy(ii_state, depth, csvArray):
+    piece = [0] * 8  # 敵の駒のリスト 駒ごとの推測値を格納
+    alive_piece_num = len(ii_state.enemy_piece_list)  # 生きてる駒の数をカウント
+    dead_piece_num = 8 - alive_piece_num
+    # 全ての推測値に対して、推測値*青色かどうか（1,0）を計算し、駒ごとの推測値を計算
+    for est in ii_state.enemy_estimated_num:
+        red_piece_set = set([0, 1, 2, 3, 4, 5, 6, 7]) - set(est[1])
+        for blue_est_index in est[1]:
+            piece[blue_est_index] += est[0]
+        for red_est_index in red_piece_set:
+            piece[red_est_index] -= est[0]
+
+    # 実際の駒の色とどれだけ一致しているかを確認
+    # 評価案1：推測値が高い順の4駒を青駒とした場合に、実際の駒色といくつ一致しているか
+    np_piece = np.array(piece)
+    blue_index = np.split(np_piece.argsort()[::-1], 2)[0]
+    red_index = set([0, 1, 2, 3, 4, 5, 6, 7]) - set(blue_index)
+    value = 0
+    for est_blue in blue_index:
+        if est_blue in ii_state.real_enemy_piece_blue_set:
+            value += 1
+    for est_red in red_index:
+        if est_red in ii_state.real_enemy_piece_red_set:
+            value += 1
+
+    value = (value - dead_piece_num) / len(ii_state.enemy_piece_list)
+
+    # 評価案2：推測値estを[0,1]とした場合に、青駒 -> (est-0.5)/4, 赤駒 -> (0.5-est)/4
+    # これらを全て足し合わせると[-1,1]になるはず（IPSJで出したやつ）
+
+    # 推測値の正規化
+    estimated_num = np.array(piece)
+    alive_blue_piece = 4
+    # 死んでる駒を省く
+    dead_piece_index_set = set([0, 1, 2, 3, 4, 5, 6, 7]) - set(
+        ii_state.enemy_piece_list
+    )
+    for dead_piece_index in dead_piece_index_set:  # 死んでいる駒を一旦INFにする（np.aminで参照したくないため）
+        if estimated_num[dead_piece_index] > 0:
+            alive_blue_piece -= 1  # ついでに生きている青駒をカウント（死んだ駒が青ならestは必ず0より大きい）
+        estimated_num[dead_piece_index] = INF
+    estimated_num -= np.amin(estimated_num)  # 最小値を0にする
+    for dead_piece_index in dead_piece_index_set:  # 死んでいる駒を0（最小値）にする
+        estimated_num[dead_piece_index] = 0
+    if np.sum(estimated_num) > 0:
+        estimated_num /= np.sum(estimated_num)  # 合計1に正規化する
+    estimated_num *= alive_blue_piece  # 合計を生存する青駒の数に変更（青駒が2個なら2）
+
+    blue_piece_set = ii_state.real_enemy_piece_blue_set  # 青駒のセット
+
+    est_accuracy = 0
+    for index in ii_state.enemy_piece_list:
+        if index in blue_piece_set:
+            est_accuracy += estimated_num[index] - 0.5  # 青駒 -> (est-0.5)/4
+        else:
+            est_accuracy += 0.5 - estimated_num[index]  # 赤駒 -> (0.5-est)/4
+
+    est_accuracy = (est_accuracy * 2) / alive_piece_num
+
+    # カウントする要素
+    csvArray[dead_piece_num][depth][0] += est_accuracy  # 推測の正確さ
+    csvArray[dead_piece_num][depth][1] += value  # 的中率
+    csvArray[dead_piece_num][depth][2] += 1  # サンプル数
+
+    return csvArray
+
+
+# 推測の正確さをcsvに出力
+def export_csv_of_estimate_accuracy(csvArray):
+    import csv
+
+    with open("csv_data/est.csv", "w") as f:
+        writer = csv.writer(f)
+        for dead_piece_num, est_array in enumerate(csvArray):
+            writer.writerow("死駒数:" + str(dead_piece_num))
+            writer.writerow("ターン数", "推測の正確さ", "駒の的中率", "サンプル数")
+            for depth, est_data in enumerate(est_array):
+                writer.writerow(
+                    depth,
+                    est_data[0] / est_data[2],
+                    est_data[1] / est_data[2],
+                    est_data[2],
+                )
+            # 2行ぐらいあけとくか...
+            writer.writerow()
+            writer.writerow()
+
+
+# 推測の正確さを図るために数百回試合を行う
+def csv_eval_est(gamma=0.9):
+    from test import HandyAction
+    from GuessEnemyPiece import ii_state_action, rand_n_world_action
+
+    ci_model_path = "models/108000.pth"
+    ii_handy_action = IIHandyAction("ii_models/40000.pth")
+    csvArray = [[[0] * 3 for i in range(300)] for j in range(8)]
+
+    for _ in range(100):
+        just_before_action_num = -1
+
+        # 状態の生成
+        state = State()
+        ii_state = create_ii_state_from_state(state, enemy_view=True)
+        handy_action = HandyAction(ci_model_path)  # 完全情報ガイスター
+
+        # ゲーム終了までループ
+        while True:
+            if state.is_done():
+                break
+            if state.depth % 2 == 0:
+                just_before_action_num = random_action(state)  # ランダム
+                # just_before_action_num = mcts_action(state)  # 透視MCTS
+                if just_before_action_num == 2 or just_before_action_num == 22:
+                    state.is_goal = True
+                    state.goal_player = 0
+                    break
+                state = state.next(just_before_action_num)
+
+            else:
+                # 推測+完全情報の方策を用いた行動決定
+                just_before_action_num = ci_pridict_action(
+                    ii_state, just_before_action_num, ci_model_path, gamma
+                )
+                # 推測のやつ
+                measure_estimate_accuracy(ii_state, state.depth, csvArray)
+
+                if just_before_action_num == 2 or just_before_action_num == 22:
+                    state.is_goal = True
+                    state.goal_player = 1
+                    break
+                state = state.next(just_before_action_num)
+
+    export_csv_of_estimate_accuracy(csvArray)
 
 
 def csv_evalRL(path_list=["40000"], gamma=0.9):
@@ -814,8 +927,10 @@ if __name__ == "__main__":
     # path_list = ["10000", "20000", "30000", "40000"]
     # csv_evalRL(path_list)
 
-    path = "108000"
-    evaluate_human(path)
+    # path = "108000"
+    # evaluate_human(path)
+
+    csv_eval_est()
 
     # evaluate_GeisterLog()
     # path_list = ["1", "3000", "5000", "10000"]
