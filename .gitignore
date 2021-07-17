@@ -5,3 +5,5 @@
 models/*
 ii_models/*
 make_graph/*
+csv_data
+csv_data/*
