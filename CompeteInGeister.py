@@ -784,14 +784,19 @@ def export_csv_of_estimate_accuracy(csvArray):
         writer = csv.writer(f)
         for dead_piece_num, est_array in enumerate(csvArray):
             writer.writerow("死駒数:" + str(dead_piece_num))
-            writer.writerow("ターン数", "推測の正確さ", "駒の的中率", "サンプル数")
+            writer.writerow(["ターン数", "推測の正確さ", "駒の的中率", "サンプル数"])
             for depth, est_data in enumerate(est_array):
-                writer.writerow(
-                    depth,
-                    est_data[0] / est_data[2],
-                    est_data[1] / est_data[2],
-                    est_data[2],
-                )
+                if est_data[2] > 0:  # 0除算対策
+                    writer.writerow(
+                        [
+                            depth,
+                            est_data[0] / est_data[2],
+                            est_data[1] / est_data[2],
+                            est_data[2],
+                        ]
+                    )
+                else:
+                    writer.writerow([depth, 0, 0, 0])
             # 2行ぐらいあけとくか...
             writer.writerow()
             writer.writerow()
@@ -806,7 +811,7 @@ def csv_eval_est(gamma=0.9):
     ii_handy_action = IIHandyAction("ii_models/40000.pth")
     csvArray = [[[0] * 3 for i in range(300)] for j in range(8)]
 
-    for _ in range(100):
+    for _ in range(200):
         just_before_action_num = -1
 
         # 状態の生成
@@ -819,8 +824,9 @@ def csv_eval_est(gamma=0.9):
             if state.is_done():
                 break
             if state.depth % 2 == 0:
-                just_before_action_num = random_action(state)  # ランダム
+                # just_before_action_num = random_action(state)  # ランダム
                 # just_before_action_num = mcts_action(state)  # 透視MCTS
+                just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
                 if just_before_action_num == 2 or just_before_action_num == 22:
                     state.is_goal = True
                     state.goal_player = 0
