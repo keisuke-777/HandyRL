@@ -1285,7 +1285,8 @@ def action_decision(model_path, ii_state):
         # 最小値を0にする
         np_policies -= np.amin(np_policies)
         # 最小値0、合計1に正規化する
-        np_policies /= np.sum(np_policies)
+        if np.sum(np_policies) > 0:  # 0除算対策
+            np_policies /= np.sum(np_policies)
 
         # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
         actions_value_sum_list = actions_value_sum_list + (
@@ -1482,7 +1483,8 @@ def rand_n_world_action(model_path, n):
             # 最小値を0にする
             np_policies -= np.amin(np_policies)
             # 最小値0、合計1に正規化する
-            np_policies /= np.sum(np_policies)
+            if np.sum(np_policies) > 0:  # 0除算対策
+                np_policies /= np.sum(np_policies)
 
             # パターンごとに「推測値を重みとして掛けた方策」を足し合わせる
             actions_value_sum_list = actions_value_sum_list + np_policies
