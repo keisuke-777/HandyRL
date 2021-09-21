@@ -798,8 +798,8 @@ def export_csv_of_estimate_accuracy(csvArray):
                 else:
                     writer.writerow([depth, 0, 0, 0])
             # 2行ぐらいあけとくか...
-            writer.writerow()
-            writer.writerow()
+            writer.writerow("")
+            writer.writerow("")
 
 
 # 推測の正確さを図るために数百回試合を行う
@@ -811,13 +811,21 @@ def csv_eval_est(gamma=0.9):
     ii_handy_action = IIHandyAction("ii_models/40000.pth")
     csvArray = [[[0] * 3 for i in range(300)] for j in range(8)]
 
-    for _ in range(200):
+    for _ in range(300):
         just_before_action_num = -1
 
         # 状態の生成
         state = State()
+
         ii_state = create_ii_state_from_state(state, enemy_view=True)
+        enemy_ii_state = create_ii_state_from_state(state, enemy_view=False)
         handy_action = HandyAction(ci_model_path)  # 完全情報ガイスター
+
+        # 透視完全情報RL用
+        ii_state_see_through = create_ii_state_from_state(
+            state, enemy_view=True, through_num=8, wrong_through_num=0
+        )
+        rw_n_action = rand_n_world_action(ci_model_path, 1)
 
         # ゲーム終了までループ
         while True:
@@ -826,6 +834,9 @@ def csv_eval_est(gamma=0.9):
             if state.depth % 2 == 0:
                 # just_before_action_num = random_action(state)  # ランダム
                 # just_before_action_num = mcts_action(state)  # 透視MCTS
+                just_before_action_num = ii_state_action(
+                    rw_n_action, ii_state_see_through, just_before_action_num
+                )  # 透視完全情報RL
                 just_before_action_num = no_cheat_mcts_action(state)  # 透視なしのMCTS
                 if just_before_action_num == 2 or just_before_action_num == 22:
                     state.is_goal = True
@@ -838,14 +849,15 @@ def csv_eval_est(gamma=0.9):
                 just_before_action_num = ci_pridict_action(
                     ii_state, just_before_action_num, ci_model_path, gamma
                 )
-                # 推測のやつ
-                measure_estimate_accuracy(ii_state, state.depth, csvArray)
 
                 if just_before_action_num == 2 or just_before_action_num == 22:
                     state.is_goal = True
                     state.goal_player = 1
                     break
                 state = state.next(just_before_action_num)
+
+            # 推測のやつ
+            measure_estimate_accuracy(ii_state, state.depth, csvArray)
 
     export_csv_of_estimate_accuracy(csvArray)
 
