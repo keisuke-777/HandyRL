@@ -130,6 +130,50 @@ class AccessableState:
         # 青駒のゴール行動の可否は1ターンに1度だけ判定すれば良いので、例外的にlegal_actionsで処理する(ここでは処理しない)
         return actions
 
+    # 敵駒を取る行動とゴールに近づく行動以外を排除したlegal_actions_pos
+    def reduced_legal_actions_pos(self, position):
+        actions = []
+        x = position % 6
+        y = int(position / 6)
+        if x < 3:  # 左のゴールに近い
+            if x != 0 and self.pieces[position - 1] not in (1, 2):
+                actions.append(self.position_to_action(position, 1))  # 左
+            if x != 5 and self.pieces[position + 1] == -1:  # 右に敵の駒が存在
+                actions.append(self.position_to_action(position, 3))  # 右
+        else:  # 右のゴールに近い
+            if x != 5 and self.pieces[position + 1] not in (1, 2):
+                actions.append(self.position_to_action(position, 3))  # 右
+            if x != 0 and self.pieces[position - 1] == -1:  # 左に敵の駒が存在
+                actions.append(self.position_to_action(position, 1))  # 左
+
+        if y != 0 and self.pieces[position - 6] not in (1, 2):
+            actions.append(self.position_to_action(position, 2))  # 上
+        if y != 5 and self.pieces[position + 6] == -1:  # 下に敵の駒が存在
+            actions.append(self.position_to_action(position, 0))  # 下
+        return actions
+
+    # 敵駒を取る行動とゴールに近づく行動以外を排除したenemy_legal_actions_pos
+    def reduced_enemy_legal_actions_pos(self, position):
+        actions = []
+        x = position % 6
+        y = int(position / 6)
+        if x < 3:  # 左のゴールに近い
+            if x != 0 and self.pieces[position - 1] != -1:
+                actions.append(self.position_to_action(position, 1))  # 左
+            if x != 5 and self.pieces[position + 1] in (1, 2):  # 右に相手の駒が存在
+                actions.append(self.position_to_action(position, 3))  # 右
+        else:  # 右のゴールに近い
+            if x != 5 and self.pieces[position + 1] != -1:
+                actions.append(self.position_to_action(position, 3))  # 右
+            if x != 0 and self.pieces[position - 1] in (1, 2):  # 左に敵の駒が存在
+                actions.append(self.position_to_action(position, 1))  # 左
+
+        if y != 5 and self.pieces[position + 6] != -1:
+            actions.append(self.position_to_action(position, 0))  # 下
+        if y != 0 and self.pieces[position - 6] in (1, 2):  # 上に敵の駒が存在
+            actions.append(self.position_to_action(position, 2))  # 上
+        return actions
+
     # 次の状態の取得
     def next(self, action):
         ii_state = AccessableState()
