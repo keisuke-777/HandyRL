@@ -204,3 +204,25 @@ class AccessableState:
             ii_state.my_turn = True
             ii_state.depth += 1
             return ii_state
+
+    # 文字列表示
+    def __str__(self):
+        row = "|{}|{}|{}|{}|{}|{}|"
+        hr = "\n-------------------------------\n"
+        board_essence = []
+        for i in self.pieces:
+            if i == 1:
+                board_essence.append("自青")
+            elif i == 2:
+                board_essence.append("自赤")
+            elif i == -1:
+                board_essence.append("敵青")
+            elif i == -2:
+                board_essence.append("敵赤")
+            else:
+                board_essence.append("　　")
+
+        str = (
+            hr + row + hr + row + hr + row + hr + row + hr + row + hr + row + hr
+        ).format(*board_essence)
+        return str
