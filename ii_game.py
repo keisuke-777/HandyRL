@@ -39,7 +39,6 @@ class AccessableState:
                     self.enemy_left_red_piece += 1
                 # 表示上は全て青駒とする
                 self.pieces[35 - i] = -1
-
         self.my_turn = True
         self.depth = state.depth
 
@@ -50,7 +49,7 @@ class AccessableState:
         self.enemy_left_red_piece = ii_state.enemy_left_red_piece
         self.my_left_blue_piece = ii_state.my_left_blue_piece
         self.my_left_red_piece = ii_state.my_left_red_piece
-        self.pieces = ii_state.pieces
+        self.pieces = ii_state.pieces.copy()
         self.my_turn = ii_state.my_turn
         self.depth = ii_state.depth
 
@@ -136,7 +135,6 @@ class AccessableState:
         ii_state = AccessableState()
         ii_state.overwrite_from_ii_state(self)
         if ii_state.my_turn:  # 自分のターン
-            print(ii_state.depth)
             # position_bef->移動前の駒の位置、position_aft->移動後の駒の位置
             # 行動を(移動元, 移動方向)に変換
             position_bef, direction = ii_state.action_to_position(action)
