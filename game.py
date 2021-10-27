@@ -133,6 +133,35 @@ class State:
         # 青駒のゴール行動の可否は1ターンに1度だけ判定すれば良いので、例外的にlegal_actionsで処理する(ここでは処理しない)
         return actions
 
+    # ゴールに近づくか敵のコマをとる以外の行動を削った合法手のリストの取得
+    def reduced_legal_actions(self):
+        actions = []
+        for p in range(36):
+            if self.pieces[p] != 0:
+                # 存在するなら駒の位置を渡して、その駒の取れる行動をactionsに追加
+                actions.extend(self.reduced_legal_actions_pos(p))
+        if self.pieces[0] == 1:
+            actions.extend([2])  # 0*4 + 2
+        if self.pieces[5] == 1:
+            actions.extend([22])  # 5*4 + 2
+        return actions
+
+    # TODO: 敵のコマをとる行動を追加する
+    def reduced_legal_actions_pos(self, position):
+        actions = []
+        x = position % 6
+        y = int(position / 6)
+        if x < 3:  # 左側（ゴールに近づく行動は上と左のみ）
+            if x != 0 and self.pieces[position - 1] == 0:  # 左が合法手か確認
+                actions.append(self.position_to_action(position, 1))
+            if y != 0 and self.pieces[position - 6] == 0:  # 上が合法手か確認
+                actions.append(self.position_to_action(position, 2))
+        else:  # 右側
+            if y != 0 and self.pieces[position - 6] == 0:  # 上が合法手か確認
+                actions.append(self.position_to_action(position, 2))
+            if x != 5 and self.pieces[position + 1] == 0:  # 右が合法手か確認
+                actions.append(self.position_to_action(position, 3))
+
     # 次の状態の取得
     def next(self, action):
         # 次の状態の作成
@@ -273,8 +302,7 @@ def mcts_action(state):
             # ゲーム終了時
             if self.state.is_done():
                 # 勝敗結果で価値を取得
-                value = -1  # 負けも引き分けも-1(要調整)
-                # value = -1 if self.state.is_lose() else 0  # 負けは-1、引き分けは0
+                value = -1 if self.state.is_lose() else 0  # 負けは-1、引き分けは0
 
                 # 累計価値と試行回数の更新
                 self.w += value
