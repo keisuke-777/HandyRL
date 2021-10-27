@@ -21,14 +21,14 @@ def create_ev_table(ev_table):
         ev_table[index] = 1 / r
 
 
-def evaluate_board_state(state):
+def evaluate_board_state(ii_state):
     value = 0
     # 自分の青ゴマが敵のゴールにどれだけ近いか
-    for index, piece in enumerate(state.pieces):
+    for index, piece in enumerate(ii_state.pieces):
         if piece == 1:
             value += ev_table[index]
     # 敵のコマがどれだけ自分のゴールに近いか
-    for index, piece in enumerate(state.pieces):
+    for index, piece in enumerate(ii_state.pieces):
         if piece != 0:
             value -= ev_table[35 - index]
 
@@ -39,10 +39,16 @@ def evaluate_board_state(state):
 def alpha_beta(ii_state, alpha, beta, search_depth):
     # 負けた場合は無条件で評価値最低にする
     if ii_state.is_lose():
-        return -INFINITY
+        if ii_state.my_turn:
+            return -INFINITY
+        else:
+            return INFINITY
 
     if ii_state.is_win():
-        return INFINITY
+        if ii_state.my_turn:
+            return INFINITY
+        else:
+            return -INFINITY
 
     # 規定の深さまで来たら、探索を打ち切り状態を評価する
     if search_depth == max_depth:
