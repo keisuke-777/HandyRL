@@ -32,7 +32,10 @@ def evaluate_board_state(ii_state):
         if piece != 0:
             value -= ev_table[35 - index]
 
-    return value
+    if ii_state.my_turn:
+        return value
+    else:
+        return -value
 
 
 # アルファベータ法で状態価値計算
@@ -106,13 +109,11 @@ if __name__ == "__main__":
 
         # 行動の取得
         if state.is_first_player():
-            print(state)
             action = mcts_action(state)
         else:
-            print(state)
             action = alpha_beta_action(state)
 
-        # print(state)
+        print(state)
 
         # 次の状態の取得
         state = state.next(action)
