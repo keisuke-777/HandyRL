@@ -79,7 +79,7 @@ class AccessableState:
             for p in range(36):
                 if self.pieces[p] in (1, 2):
                     # 自分の駒が存在するなら駒の位置を渡して、その駒の取れる行動をactionsに追加
-                    actions.extend(self.legal_actions_pos(p))
+                    actions.extend(self.reduced_legal_actions_pos(p))
             # 青駒のゴール行動は例外的に合法手リストに追加
             if self.pieces[0] == 1:
                 actions.extend([2])  # 0*4 + 2
@@ -88,7 +88,7 @@ class AccessableState:
         else:
             for p in range(36):
                 if self.pieces[p] in (-1, -2):
-                    actions.extend(self.enemy_legal_actions_pos(p))
+                    actions.extend(self.reduced_enemy_legal_actions_pos(p))
             # ゴール行動は例外的に合法手リストに追加（相手の駒は全てゴール可能とする）
             if self.pieces[30] == -1:
                 actions.extend([120])  # 30*4 + 0
