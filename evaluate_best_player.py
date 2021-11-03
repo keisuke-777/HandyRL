@@ -1,6 +1,7 @@
 from game import State, random_action, human_player_action, mcts_action
 from pathlib import Path
 import numpy as np
+from AlphaBetaSearch import alpha_beta_action
 
 # パラメータの準備
 EP_GAME_COUNT = 100  # 1評価あたりのゲーム数
@@ -64,7 +65,8 @@ def evaluate_best_player():
 
     # handy_action = HandyAction("models/40000.pth")
 
-    # from test import IIHandyAction
+    from test import IIHandyAction
+
     # handy_action = IIHandyAction("ii_models/10000.pth")
 
     # # VS過去の自分
@@ -96,16 +98,26 @@ def evaluate_best_player():
     # next_actions = (handy_action, human_player_action)
     # evaluate_algorithm_of("VS_Human", next_actions)
 
+    # ホゲホゲ
+    # next_actions = (alpha_beta_action, mcts_action)
+    # evaluate_algorithm_of("alphabeta_VS_MCTS", next_actions)
+
+    # vsαβ
+    handy_action = IIHandyAction("ii_models/40000.pth")
+    # handy_action = HandyAction("models/108000.pth")
+    next_actions = (alpha_beta_action, handy_action)
+    evaluate_algorithm_of("alphabeta_VS_iiHandy", next_actions)
+
     # 自己対戦
     # next_actions = (next_pv_mcts_action, first_next_pv_mcts_action)
     # evaluate_algorithm_of("VS_過去の自分", next_actions)
 
-    for i in range(15):
-        path = "models/" + str(i * 5000 + 5000) + ".pth"
-        handy_action = HandyAction(path)
-        print(path)
-        next_actions = (handy_action, mcts_action)
-        evaluate_algorithm_of("VS_MCTS", next_actions)
+    # for i in range(15):
+    #     path = "models/" + str(i * 5000 + 5000) + ".pth"
+    #     handy_action = HandyAction(path)
+    #     print(path)
+    #     next_actions = (handy_action, mcts_action)
+    #     evaluate_algorithm_of("VS_MCTS", next_actions)
 
 
 # 動作確認
